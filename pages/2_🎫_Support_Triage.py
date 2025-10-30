@@ -71,6 +71,20 @@ if "support_results" not in st.session_state:
 if "support_usage" not in st.session_state:
     st.session_state.support_usage: Dict = {"total_tokens": 0, "estimated_cost": 0.0}
 
+col_left, col_right = st.columns([2, 1])
+
+with col_left:
+    st.subheader("Process Tickets")
+    st.markdown(
+        "Click the button below to run tickets through the LangGraph workflow. "
+        "Each agent's actions will appear live while the ticket is processed."
+    )
+
+with col_right:
+    process_button = st.button("🚀 Process Pending Tickets", use_container_width=True)
+
+st.divider()
+
 # Ticket preview cards
 st.subheader("Pending Tickets")
 ticket_columns = st.columns(len(tickets_data))
@@ -94,20 +108,6 @@ for col, ticket in zip(ticket_columns, tickets_data):
             )
         else:
             col.info("Awaiting processing", icon="🕒")
-
-st.divider()
-
-col_left, col_right = st.columns([2, 1])
-
-with col_left:
-    st.subheader("Process Tickets")
-    st.markdown(
-        "Click the button below to run tickets through the LangGraph workflow. "
-        "Each agent's actions will appear live while the ticket is processed."
-    )
-
-with col_right:
-    process_button = st.button("🚀 Process Pending Tickets", use_container_width=True)
 
 st.divider()
 
