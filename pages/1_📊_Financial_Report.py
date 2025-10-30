@@ -25,7 +25,7 @@ load_dotenv()
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Financial Analyst",
+    page_title="AI Financial Report",
     page_icon="🤖",
     layout="wide"
 )
@@ -69,10 +69,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🤖 AI Financial Analyst with Interactive Chat")
+st.title("🤖 AI-Powered Financial Report")
 st.markdown("""
-Ask questions about your Q3 2025 sales data and watch the AI agent work in real-time!
-See which tools it uses, how it retrieves data, and get answers with citations to source data.
+Welcome! Ask questions about the Q3 2025 sales data. 
+The AI will analyze the data, show you its work, and provide answers with clear sources.
 """)
 
 st.divider()
@@ -164,66 +164,31 @@ with st.sidebar:
 
     st.divider()
 
-    st.header("💡 Example Questions")
+    st.header("💡 Suggested Prompts")
     st.markdown("""
-    Try asking:
-    - "What were the top 5 products?"
+    - "What were our top 5 products?"
     - "Show me revenue by month"
-    - "Which customer segment bought the most?"
-    - "Forecast Q4 revenue"
-    - "Find all Wireless Headphones sales"
-    - "Calculate average transaction value"
-    - "What products are declining?"
-    """)
-
-    st.divider()
-
-    st.header("🛠️ AI Tools Available")
-    st.markdown("""
-    The agent has access to:
-    1. **QuerySalesData** - Search with citations
-    2. **CalculateStatistics** - Compute metrics
-    3. **FindSpecificData** - Get exact rows
-    4. **ForecastRevenue** - Prophet ML model
+    - "Which customer segment was most profitable?"
+    - "Forecast our revenue for Q4"
     """)
 
 # Main content area
 if not st.session_state.data_loaded:
-    # Welcome screen
-    st.info("👈 Click 'Load Sales Data' in the sidebar to get started!")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("""
-        ### 🎯 What's Different?
-        - **LangChain-powered** agent
-        - **Tool-based reasoning** (visible!)
-        - **RAG with citations** to source data
-        - **Interactive chat** interface
-        """)
-
-    with col2:
-        st.markdown("""
-        ### 🔍 Transparent AI
-        - See which tools the AI uses
-        - View actual data queries
-        - Citations with row numbers
-        - Real-time reasoning display
-        """)
-
-    with col3:
-        st.markdown("""
-        ### 🚀 Capabilities
-        - Natural language queries
-        - Complex multi-step analysis
-        - ML-based forecasting
-        - Automated report generation
-        """)
+    st.info("""
+    ### Welcome to the AI Financial Analyst!_x000D_
+_x000D_
+    This dashboard is designed for easy interaction with your financial data. Here’s what you can do:_x000D_
+_x000D_
+    - **Chat with the AI**: Ask questions in plain language in the “💬 Interactive Chat” tab._x000D_
+    - **Get Automated Reports**: Let the AI generate a comprehensive financial summary for you in the “📊 Automated Report” tab._x000D_
+    - **View Key Metrics**: See important charts and visualizations in the “📈 Visualizations” tab._x000D_
+_x000D_
+    👈 **To get started, click 'Load Sales Data' in the sidebar.**
+    """)
 
 else:
     # Main interface with tabs
-    tab1, tab2, tab3 = st.tabs(["💬 Interactive Chat", "📊 Automated Report", "📈 Visualizations"])
+    tab1, tab2, tab3 = st.tabs(["💬 Chat with AI", "📄 AI-Generated Report", "📈 Data Dashboards"])
 
     # TAB 1: Interactive Chat
     with tab1:
@@ -355,9 +320,6 @@ else:
                                             st.write(result['result'])
                                     else:
                                         st.error(f"Error: {result.get('error', 'Unknown error')}")
-        else:
-            # No messages yet - show welcome
-            st.info("👋 Ask a question about your Q3 2025 sales data to get started!")
 
         # Chat input
         st.divider()
@@ -375,39 +337,61 @@ else:
         with col2:
             send_button = st.button("📤 Send", use_container_width=True, type="primary")
 
+        st.markdown("<h5 style='text-align: center; color: #64748b;'>Or try one of these suggested prompts:</h5>", unsafe_allow_html=True)
+
         # Quick action buttons
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
-            if st.button("📊 Top Products", use_container_width=True):
-                user_input = "What were the top 5 products by revenue? Include specific numbers and citations."
+            if st.button("Top 5 Products", use_container_width=True):
+                user_input = "What were the top 5 products by revenue?"
                 send_button = True
 
         with col2:
-            if st.button("📈 Monthly Trend", use_container_width=True):
-                user_input = "Show me the monthly revenue trend from July to September."
+            if st.button("Monthly Trend", use_container_width=True):
+                user_input = "Show me the monthly revenue trend."
                 send_button = True
 
         with col3:
-            if st.button("💼 Best Segment", use_container_width=True):
+            if st.button("Best Segment", use_container_width=True):
                 user_input = "Which customer segment generated the most revenue?"
                 send_button = True
-
-        col4, col5, col6 = st.columns(3)
-
+        
         with col4:
-            if st.button("🔮 Forecast Q4", use_container_width=True):
-                user_input = "Forecast Q4 revenue using Prophet and tell me the expected growth rate."
+            if st.button("Forecast Q4", use_container_width=True):
+                user_input = "Forecast Q4 revenue."
                 send_button = True
 
         with col5:
-            if st.button("🎧 Find Headphones Sales", use_container_width=True):
+            if st.button("Find Headphones", use_container_width=True):
                 user_input = "Find all sales for 'Wireless Headphones'."
                 send_button = True
 
+        col6, col7, col8, col9, col10 = st.columns(5)
+
         with col6:
-            if st.button("📉 Declining Products", use_container_width=True):
+            if st.button("Declining Products", use_container_width=True):
                 user_input = "What products are declining in revenue?"
+                send_button = True
+        
+        with col7:
+            if st.button("Avg. Revenue", use_container_width=True):
+                user_input = "What is the average revenue per transaction?"
+                send_button = True
+
+        with col8:
+            if st.button("Revenue by Category", use_container_width=True):
+                user_input = "Show me the revenue by product category."
+                send_button = True
+        
+        with col9:
+            if st.button("Most Profitable", use_container_width=True):
+                user_input = "Which products have the highest profit margin?"
+                send_button = True
+
+        with col10:
+            if st.button("Compare Products", use_container_width=True):
+                user_input = "Compare the sales of 'Smartwatch' and 'Fitness Tracker'."
                 send_button = True
 
         # Process user input
@@ -436,24 +420,12 @@ else:
 
             st.rerun()
 
-        # Show history button if there are previous messages
-        if len(st.session_state.chat_messages) > 2:
-            with st.expander(f"📜 View Previous Queries ({len(st.session_state.chat_messages)//2 - 1} older)", expanded=False):
-                # Show all except the last 2
-                for msg in st.session_state.chat_messages[:-2]:
-                    if msg['role'] == 'user':
-                        st.caption(f"**Q:** {msg['content']}")
-                    elif msg['role'] == 'assistant':
-                        st.caption(f"**A:** {msg['content'][:100]}...")
-                        st.divider()
-
-    # TAB 2: Automated Report
     with tab2:
-        st.markdown("### 📋 Automated Comprehensive Analysis")
+        st.markdown("### 📄 AI-Generated Report")
         st.caption("Let the AI generate a full report using all available tools")
 
         if not st.session_state.report_generated:
-            if st.button("🚀 Generate Comprehensive Report", type="primary", use_container_width=True):
+            if st.button("🚀 Generate Report", type="primary", use_container_width=True):
                 with st.spinner("Generating comprehensive report... This may take 30-60 seconds."):
 
                     # Show progress
@@ -494,8 +466,12 @@ else:
             # Display report
             report = st.session_state.report_content
 
+            # Show report content
+            st.markdown("### 📄 Report")
+            st.markdown(report['response'])
+
             # Show tool usage
-            with st.expander("🔧 Tools Used by AI Agent", expanded=True):
+            with st.expander("🔧 View AI's Work", expanded=False):
                 for i, step in enumerate(report['intermediate_steps'], 1):
                     st.markdown(f"""
                     **Step {i}: {step['tool']}**
@@ -509,21 +485,17 @@ else:
                     """)
                     st.divider()
 
-            # Show report content
-            st.markdown("### 📄 Report")
-            st.markdown(report['response'])
-
             # Action buttons
             if st.button("🔄 Generate New Report", use_container_width=True):
                 st.session_state.report_generated = False
                 st.rerun()
 
-    # TAB 3: Visualizations
     with tab3:
-        st.markdown("### 📊 Data Visualizations")
+        st.markdown("### 📈 Data Dashboards")
+        st.caption("Visualize your data with interactive charts")
 
         if st.session_state.figures is None:
-            if st.button("📈 Generate Charts", type="primary", use_container_width=True):
+            if st.button("🚀 Generate Dashboards", type="primary", use_container_width=True):
                 with st.spinner("Creating visualizations..."):
                     st.session_state.figures = st.session_state.agent.generate_visualizations()
                     st.rerun()
@@ -538,8 +510,6 @@ else:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #64748b; font-size: 0.9em;'>
-    Powered by LangChain + Google Gemini + Prophet •
-    Real-time tool usage • Citations to source data •
-    <a href='https://github.com' style='color: #2563eb;'>View Source</a>
+    <p><a href='https://github.com/kyle-mirich/ai-business-automation-demo' style='color: #2563eb;'>View Source</a></p>
 </div>
 """, unsafe_allow_html=True)
