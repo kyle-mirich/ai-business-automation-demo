@@ -8,6 +8,10 @@ Features:
 - Prophet forecasting integration
 """
 
+import calendar
+import difflib
+import re
+
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -51,7 +55,7 @@ class FinancialAgentLangChain:
 
         # Initialize Gemini
         genai.configure(api_key=api_key)
-        self.llm = genai.GenerativeModel('gemini-2.5-flash')
+        self.llm = genai.GenerativeModel('gemini-2.5-flash-lite')
 
         # Create tools
         self.tools = self._create_tools()
@@ -98,54 +102,155 @@ class FinancialAgentLangChain:
 
             try:
                 query_lower = query.lower()
+                month_numbers = self._extract_months_from_query(query_lower)
+                filtered_df = (
+                    self.df[self.df['date'].dt.month.isin(month_numbers)].copy()
+                    if month_numbers else self.df
+                )
+
+                if month_numbers and filtered_df.empty:
+                    return "No sales data found for the requested month(s)."
+
+                active_df = filtered_df if month_numbers else self.df
                 results = []
                 citations = []
 
+                month_scope = self._format_month_scope(month_numbers)
+
                 # Revenue queries
                 if "revenue" in query_lower or "sales" in query_lower:
-                    total_rev = self.df['revenue'].sum()
-                    results.append(f"Total revenue: ${total_rev:,.2f}")
-                    citations.append(f"Source: Aggregated from {len(self.df)} transactions")
+                    total_rev = active_df['revenue'].sum()
+                    total_cost = active_df['cost'].sum()
+                    profit = total_rev - total_cost
+                    transactions = len(active_df)
+                    if month_scope:
+                        results.append(f"Total revenue for {month_scope}: ${total_rev:,.2f}")
+                    else:
+                        results.append(f"Total revenue: ${total_rev:,.2f}")
+                    results.append(f"Total cost: ${total_cost:,.2f}")
+                    results.append(f"Profit: ${profit:,.2f}")
+                    results.append(f"Transactions analyzed: {transactions}")
+
+                    date_min = active_df['date'].min().strftime('%Y-%m-%d')
+                    date_max = active_df['date'].max().strftime('%Y-%m-%d')
+                    citations.append(
+                        f"Revenue scope ({month_scope or 'full dataset'}): {transactions} transactions "
+                        f"between {date_min} and {date_max}"
+                    )
 
                 # Product queries
                 if "product" in query_lower or "top" in query_lower:
-                    top_products = self.df.groupby('product')['revenue'].sum().sort_values(ascending=False).head(5)
-                    results.append("\nTop 5 products by revenue:")
+                    top_products = (
+                        active_df.groupby('product')['revenue']
+                        .sum()
+                        .sort_values(ascending=False)
+                        .head(5)
+                    )
+                    if month_scope:
+                        results.append(f"\nTop 5 products by revenue ({month_scope}):")
+                    else:
+                        results.append("\nTop 5 products by revenue:")
                     for product, rev in top_products.items():
                         results.append(f"  - {product}: ${rev:,.2f}")
-                        # Get sample row indices for this product
-                        sample_rows = self.df[self.df['product'] == product].head(3).index.tolist()
-                        citations.append(f"Product '{product}': Rows {','.join(map(str, sample_rows))}")
+                        product_df = active_df[active_df['product'] == product]
+                        transaction_count = len(product_df)
+                        first_txn = product_df['date'].min().strftime('%Y-%m-%d')
+                        last_txn = product_df['date'].max().strftime('%Y-%m-%d')
+                        citations.append(
+                            f"Product '{product}': {transaction_count} transactions "
+                            f"({first_txn} to {last_txn})"
+                        )
 
                 # Category queries
                 if "category" in query_lower or "categories" in query_lower:
-                    cat_revenue = self.df.groupby('category')['revenue'].sum().sort_values(ascending=False)
-                    results.append("\nRevenue by category:")
+                    cat_revenue = (
+                        active_df.groupby('category')['revenue']
+                        .sum()
+                        .sort_values(ascending=False)
+                    )
+                    if month_scope:
+                        results.append(f"\nRevenue by category ({month_scope}):")
+                    else:
+                        results.append("\nRevenue by category:")
                     for cat, rev in cat_revenue.items():
                         results.append(f"  - {cat}: ${rev:,.2f}")
-                        citations.append(f"Category '{cat}': {len(self.df[self.df['category'] == cat])} transactions")
+                        category_df = active_df[active_df['category'] == cat]
+                        cat_transactions = len(category_df)
+                        first_txn = category_df['date'].min().strftime('%Y-%m-%d')
+                        last_txn = category_df['date'].max().strftime('%Y-%m-%d')
+                        citations.append(
+                            f"Category '{cat}': {cat_transactions} transactions "
+                            f"({first_txn} to {last_txn})"
+                        )
 
                 # Time-based queries
-                if "month" in query_lower or "trend" in query_lower or "growth" in query_lower:
-                    self.df['month'] = self.df['date'].dt.month_name()
-                    monthly_rev = self.df.groupby('month')['revenue'].sum()
-                    results.append("\nMonthly revenue:")
-                    for month, rev in monthly_rev.items():
-                        results.append(f"  - {month}: ${rev:,.2f}")
-                    citations.append(f"Monthly breakdown from {self.summary_stats['date_range'][0]} to {self.summary_stats['date_range'][1]}")
+                if month_numbers or "month" in query_lower or "trend" in query_lower or "growth" in query_lower:
+                    monthly_source_df = filtered_df if month_numbers else self.df
+                    monthly_data = monthly_source_df.copy()
+                    monthly_data['month_number'] = monthly_data['date'].dt.month
+                    monthly_data['month_name'] = monthly_data['date'].dt.strftime('%B')
+                    monthly_summary = monthly_data.groupby(['month_number', 'month_name']).agg({
+                        'revenue': 'sum',
+                        'cost': 'sum',
+                        'quantity': 'sum',
+                        'product': 'count'
+                    }).rename(columns={
+                        'revenue': 'total_revenue',
+                        'cost': 'total_cost',
+                        'quantity': 'total_quantity',
+                        'product': 'transaction_count'
+                    }).reset_index().sort_values('month_number')
+
+                    if month_numbers:
+                        monthly_summary = monthly_summary[monthly_summary['month_number'].isin(month_numbers)]
+
+                    if not monthly_summary.empty:
+                        header = "\nMonthly revenue:"
+                        if month_scope:
+                            header = f"\nMonthly revenue ({month_scope}):"
+                        results.append(header)
+
+                        for _, row in monthly_summary.iterrows():
+                            profit_value = row['total_revenue'] - row['total_cost']
+                            results.append(
+                                f"  - {row['month_name']}: ${row['total_revenue']:,.2f} revenue | "
+                                f"${profit_value:,.2f} profit | {int(row['transaction_count'])} transactions"
+                            )
+                            month_rows = monthly_data[monthly_data['month_number'] == row['month_number']]
+                            month_date_min = month_rows['date'].min().strftime('%Y-%m-%d')
+                            month_date_max = month_rows['date'].max().strftime('%Y-%m-%d')
+                            citation_text = (
+                                f"{row['month_name']} scope: {int(row['transaction_count'])} transactions "
+                                f"({month_date_min} to {month_date_max})"
+                            )
+                            if citation_text not in citations:
+                                citations.append(citation_text)
 
                 # Customer segment queries
                 if "customer" in query_lower or "segment" in query_lower:
-                    seg_revenue = self.df.groupby('customer_segment')['revenue'].sum().sort_values(ascending=False)
-                    results.append("\nRevenue by customer segment:")
+                    seg_revenue = (
+                        active_df.groupby('customer_segment')['revenue']
+                        .sum()
+                        .sort_values(ascending=False)
+                    )
+                    if month_scope:
+                        results.append(f"\nRevenue by customer segment ({month_scope}):")
+                    else:
+                        results.append("\nRevenue by customer segment:")
                     for seg, rev in seg_revenue.items():
                         results.append(f"  - {seg}: ${rev:,.2f}")
-                        citations.append(f"Segment '{seg}': {len(self.df[self.df['customer_segment'] == seg])} transactions")
+                        segment_df = active_df[active_df['customer_segment'] == seg]
+                        seg_transactions = len(segment_df)
+                        first_txn = segment_df['date'].min().strftime('%Y-%m-%d')
+                        last_txn = segment_df['date'].max().strftime('%Y-%m-%d')
+                        citations.append(
+                            f"Segment '{seg}': {seg_transactions} transactions "
+                            f"({first_txn} to {last_txn})"
+                        )
 
                 if not results:
                     results.append("Query processed. Data available for: revenue, products, categories, monthly trends, customer segments.")
 
-                # Format response with citations
                 response = "\n".join(results)
                 response += "\n\n📚 CITATIONS:\n" + "\n".join([f"  [{i+1}] {cit}" for i, cit in enumerate(citations)])
 
@@ -186,6 +291,10 @@ class FinancialAgentLangChain:
             try:
                 criteria_lower = criteria.lower()
                 filtered = self.df.copy()
+                month_numbers = self._extract_months_from_query(criteria_lower)
+
+                if month_numbers:
+                    filtered = filtered[filtered['date'].dt.month.isin(month_numbers)]
 
                 # Filter by product
                 for product in self.df['product'].unique():
@@ -283,6 +392,69 @@ class FinancialAgentLangChain:
 
         return tools
 
+    def _extract_months_from_query(self, query_lower: str) -> List[int]:
+        """
+        Return month numbers (1-12) mentioned in the query.
+
+        Uses full month names, common abbreviations, and handles "sept".
+        """
+        months_found: List[int] = []
+        month_lookup = {
+            calendar.month_name[idx].lower(): idx
+            for idx in range(1, 13)
+        }
+        abbr_lookup = {
+            calendar.month_abbr[idx].lower(): idx
+            for idx in range(1, 13)
+            if calendar.month_abbr[idx]
+        }
+
+        for name, idx in month_lookup.items():
+            if re.search(rf"\b{name}\b", query_lower):
+                months_found.append(idx)
+
+        for abbr, idx in abbr_lookup.items():
+            if re.search(rf"\b{abbr}\b", query_lower):
+                months_found.append(idx)
+
+        tokens = re.findall(r"[a-z]+", query_lower)
+        for token in tokens:
+            if token in month_lookup:
+                months_found.append(month_lookup[token])
+                continue
+            if token in abbr_lookup:
+                months_found.append(abbr_lookup[token])
+                continue
+
+            close_full = difflib.get_close_matches(token, month_lookup.keys(), n=1, cutoff=0.72)
+            if close_full:
+                months_found.append(month_lookup[close_full[0]])
+                continue
+
+            close_abbr = difflib.get_close_matches(token, abbr_lookup.keys(), n=1, cutoff=0.9)
+            if close_abbr:
+                months_found.append(abbr_lookup[close_abbr[0]])
+
+        if any(token.startswith("sept") for token in tokens) and 9 not in months_found:
+            months_found.append(9)
+
+        return sorted(set(months_found))
+
+    def _format_month_scope(self, month_numbers: List[int]) -> str:
+        """Return a human-readable month scope label."""
+        month_names = [
+            calendar.month_name[m] for m in month_numbers
+            if 1 <= m <= 12
+        ]
+
+        if not month_names:
+            return ""
+        if len(month_names) == 1:
+            return month_names[0]
+        if len(month_names) == 2:
+            return " and ".join(month_names)
+        return ", ".join(month_names[:-1]) + f", and {month_names[-1]}"
+
     def initialize_agent(self):
         """Initialize the agent"""
         self.agent_executor = True
@@ -378,6 +550,8 @@ class FinancialAgentLangChain:
             citation_dataframe = None  # Will hold the aggregated data that answers the question
 
             query_lower = user_message.lower()
+            month_numbers = self._extract_months_from_query(query_lower)
+            scoped_df = self.df[self.df['date'].dt.month.isin(month_numbers)] if month_numbers else self.df
 
             # Decide which tools to call based on keywords
             if any(word in query_lower for word in ['top', 'product', 'revenue', 'category', 'segment', 'month', 'trend']):
@@ -388,48 +562,56 @@ class FinancialAgentLangChain:
                 # Create citation dataframe based on query type
                 if 'product' in query_lower or 'top' in query_lower:
                     # Show aggregated product revenue
-                    citation_dataframe = self.df.groupby('product').agg({
-                        'revenue': 'sum',
-                        'quantity': 'sum',
-                        'date': ['min', 'max']
-                    }).round(2)
-                    citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'First Sale', 'Last Sale']
-                    citation_dataframe = citation_dataframe.sort_values('Total Revenue', ascending=False).head(10)
-                    citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
+                    if not scoped_df.empty:
+                        citation_dataframe = scoped_df.groupby('product').agg({
+                            'revenue': 'sum',
+                            'quantity': 'sum',
+                            'date': ['min', 'max']
+                        }).round(2)
+                        citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'First Sale', 'Last Sale']
+                        citation_dataframe = citation_dataframe.sort_values('Total Revenue', ascending=False).head(10)
+                        citation_dataframe['First Sale'] = citation_dataframe['First Sale'].dt.strftime('%Y-%m-%d')
+                        citation_dataframe['Last Sale'] = citation_dataframe['Last Sale'].dt.strftime('%Y-%m-%d')
+                        citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
 
                 elif 'category' in query_lower or 'categories' in query_lower:
                     # Show category breakdown
-                    citation_dataframe = self.df.groupby('category').agg({
-                        'revenue': 'sum',
-                        'quantity': 'sum',
-                        'product': 'count'
-                    }).round(2)
-                    citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
-                    citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
+                    if not scoped_df.empty:
+                        citation_dataframe = scoped_df.groupby('category').agg({
+                            'revenue': 'sum',
+                            'quantity': 'sum',
+                            'product': 'count'
+                        }).round(2)
+                        citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
+                        citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
 
                 elif 'segment' in query_lower or 'customer' in query_lower:
                     # Show customer segment breakdown
-                    citation_dataframe = self.df.groupby('customer_segment').agg({
-                        'revenue': 'sum',
-                        'quantity': 'sum',
-                        'product': 'count'
-                    }).round(2)
-                    citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
-                    citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
+                    if not scoped_df.empty:
+                        citation_dataframe = scoped_df.groupby('customer_segment').agg({
+                            'revenue': 'sum',
+                            'quantity': 'sum',
+                            'product': 'count'
+                        }).round(2)
+                        citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
+                        citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
 
                 elif 'month' in query_lower or 'trend' in query_lower:
                     # Show monthly breakdown
-                    self.df['month_name'] = self.df['date'].dt.strftime('%B')
-                    citation_dataframe = self.df.groupby('month_name').agg({
-                        'revenue': 'sum',
-                        'quantity': 'sum',
-                        'product': 'count'
-                    }).round(2)
-                    citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
-                    citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
-                    # Reorder by actual month order
-                    month_order = ['July', 'August', 'September']
-                    citation_dataframe = citation_dataframe.reindex([m for m in month_order if m in citation_dataframe.index])
+                    monthly_source_df = scoped_df if month_numbers else self.df
+                    if not monthly_source_df.empty:
+                        monthly_data = monthly_source_df.copy()
+                        monthly_data['month_number'] = monthly_data['date'].dt.month
+                        monthly_data['month_name'] = monthly_data['date'].dt.strftime('%B')
+                        citation_dataframe = monthly_data.groupby(['month_number', 'month_name']).agg({
+                            'revenue': 'sum',
+                            'quantity': 'sum',
+                            'product': 'count'
+                        }).round(2)
+                        citation_dataframe.columns = ['Total Revenue', 'Total Quantity', 'Transaction Count']
+                        citation_dataframe['Total Revenue'] = citation_dataframe['Total Revenue'].apply(lambda x: f"${x:,.2f}")
+                        citation_dataframe = citation_dataframe.sort_index(level='month_number')
+                        citation_dataframe.index = citation_dataframe.index.droplevel('month_number')
 
             if any(word in query_lower for word in ['average', 'mean', 'median', 'statistics', 'calculate']):
                 tool_result = self.tools[1].func(user_message)
@@ -442,11 +624,10 @@ class FinancialAgentLangChain:
                 tool_outputs.append(tool_result)
 
                 # For specific data requests, show actual matching transactions
-                import re
                 # Try to extract criteria from the query
                 for product in self.df['product'].unique():
                     if product.lower() in query_lower:
-                        citation_dataframe = self.df[self.df['product'] == product].head(20).copy()
+                        citation_dataframe = scoped_df[scoped_df['product'] == product].head(20).copy()
                         # Format for display
                         citation_dataframe['revenue'] = citation_dataframe['revenue'].apply(lambda x: f"${x:.2f}")
                         citation_dataframe['cost'] = citation_dataframe['cost'].apply(lambda x: f"${x:.2f}")
@@ -488,16 +669,28 @@ Here is the data retrieved from our analysis tools:
 {context}
 
 Based on this data, provide a clear, comprehensive answer to the user's question.
-- Include specific numbers and metrics
-- Cite the sources (mention row numbers, transaction counts, etc.) from the tool outputs
-- Be concise but thorough
-- If citations are provided in the tool output, reference them in your answer
+- Focus on the relevant timeframe or filters implied by the data.
+- Include specific numbers and metrics.
+- Use plain text sentences without markdown formatting (no italics, bold, or bracketed citations).
+- Keep the response concise but thorough.
 
-Your response:"""
+Your response (plain text only):"""
 
             # Generate response
             response = self.llm.generate_content(prompt)
-            final_response = response.text
+            final_response = getattr(response, 'text', '') or ''
+            final_response = final_response.replace('*', '')
+            final_response = final_response.replace('\u2028', '\n').replace('\u2029', '\n')
+            final_response = re.sub(r'\s*\[\d+\]', '', final_response)
+            cleaned_lines = []
+            for line in final_response.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                stripped = re.sub(r'\s{2,}', ' ', stripped)
+                stripped = stripped.replace(' ,', ',').replace(' .', '.')
+                cleaned_lines.append(stripped)
+            final_response = "\n".join(cleaned_lines).strip()
 
             # Update chat history
             self.chat_history.append({'role': 'user', 'content': user_message})

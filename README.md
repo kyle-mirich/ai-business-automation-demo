@@ -7,7 +7,7 @@ A portfolio demo showcasing AI agents automating real business workflows using L
 This Streamlit application demonstrates three interactive AI-powered business automation demos:
 
 1. **📊 Financial Report Generator** (✅ Complete) - Analyzes Q3 sales data with Gemini AI and forecasts Q4 revenue using Prophet
-2. **🎫 Support Triage** (⏳ Coming Soon) - Multi-agent system using LangGraph to process and route support tickets
+2. **🎫 Support Triage** (✅ Complete) - LangGraph multi-agent system that triages support tickets end-to-end
 3. **📦 Inventory Optimizer** (⏳ Coming Soon) - AI-powered inventory analysis and reorder recommendations
 
 ## Features
@@ -149,7 +149,7 @@ streamlit run app.py
 - [x] Build FinancialAgent with Gemini and Prophet
 - [x] Create Financial Report Streamlit page
 - [x] Build homepage with navigation
-- [ ] Build Support Triage demo (LangGraph multi-agent)
+- [x] Build Support Triage demo (LangGraph multi-agent)
 - [ ] Build Inventory Optimizer demo
 - [ ] Add tests
 - [ ] Deploy to Streamlit Cloud

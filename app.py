@@ -48,22 +48,22 @@ with col1:
 
 with col2:
     st.markdown("""
-    ### 🎫 Support Triage (Coming Soon)
+    ### 🎫 Support Ticket Triage
 
-    Multi-agent system built with **LangGraph** processes support tickets
-    through 4 coordinated agents.
+    LangGraph-powered workflow that classifies, prioritizes,
+    routes, and drafts responses for live support tickets.
 
     **Features:**
-    - Classifier Agent
-    - Prioritizer Agent
-    - Router Agent
-    - Response Generator
+    - Classifier, Prioritizer, Router, Responder agents
+    - Step-by-step agent reasoning
+    - Token usage & cost tracking
+    - Gemini-generated replies
 
     **Tech Stack:**
-    `LangGraph` `Gemini` `Multi-Agent`
+    `LangGraph` `LangChain` `Gemini`
     """)
 
-    st.button("🔒 Coming Soon", disabled=True, use_container_width=True)
+    st.page_link("pages/2_🎫_Support_Triage.py", label="🚀 Launch Support Triage", use_container_width=True)
 
 with col3:
     st.markdown("""
@@ -155,7 +155,7 @@ with st.sidebar:
 
     **Current Status:**
     - ✅ Demo 1: Financial Report (Complete)
-    - ⏳ Demo 2: Support Triage (Coming)
+    - ✅ Demo 2: Support Triage (Complete)
     - ⏳ Demo 3: Inventory Optimizer (Coming)
 
     **Setup Required:**

@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "subject": "Delayed Order #87345",
+    "message": "Hi team, I'm still waiting for order #87345. It was supposed to arrive two weeks ago and the tracking has not updated. Can someone help me figure out where it is?",
+    "customer": {
+      "name": "John Smith",
+      "email": "john.smith@example.com",
+      "tier": "premium"
+    },
+    "timestamp": "2025-10-30T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "subject": "Damaged monitor arrived",
+    "message": "I received the 27\" 4K monitor today but the screen is cracked right out of the box. I need a refund or a replacement immediately. This is really disappointing.",
+    "customer": {
+      "name": "Alicia Gomez",
+      "email": "alicia.gomez@example.com",
+      "tier": "standard"
+    },
+    "timestamp": "2025-10-30T11:05:00Z"
+  },
+  {
+    "id": 3,
+    "subject": "Dashboard down for enterprise customers",
+    "message": "We cannot access the admin analytics dashboard this morning. It just spins and times out. We use this daily and need it back ASAP.",
+    "customer": {
+      "name": "Renee Williams",
+      "email": "renee.williams@brightcore.io",
+      "tier": "business"
+    },
+    "timestamp": "2025-10-30T14:05:00Z"
+  }
+]
