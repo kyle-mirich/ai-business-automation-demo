@@ -128,12 +128,12 @@ if run_analysis:
         agent = InventoryAgent(api_key=api_key, data_path=str(data_path))
         st.session_state.inventory_agent = agent
 
-        progress_box.info("Step 1/4 • Loading inventory snapshot...")
+        progress_box.info("Loading inventory snapshot...")
         summary = agent.load_inventory()
         st.session_state.inventory_summary = summary
         log_step("Load inventory data", "success", summary)
 
-        progress_box.info("Step 2/4 • Evaluating stock health...")
+        progress_box.info("Evaluating stock health...")
         analysis = agent.analyze_inventory()
         st.session_state.inventory_analysis = analysis
         log_step(
