@@ -420,7 +420,7 @@ port = 8501
 
 ### Gemini API Usage
 - Use `google.generativeai` package
-- Model: `gemini-2.5-flash-lite` for financial analysis (more capable)
+- Model: `gemini-2.5-flash` for financial analysis (more capable)
 - Model: `gemini-1.5-flash` for classification/support (faster, cheaper)
 - Set appropriate temperature:
   * 0.1-0.2 for classification (consistent)

@@ -55,7 +55,7 @@ class FinancialAgentLangChain:
 
         # Initialize Gemini
         genai.configure(api_key=api_key)
-        self.llm = genai.GenerativeModel('gemini-2.5-flash-lite')
+        self.llm = genai.GenerativeModel('gemini-2.5-flash')
 
         # Create tools
         self.tools = self._create_tools()
@@ -183,6 +183,43 @@ class FinancialAgentLangChain:
                             f"({first_txn} to {last_txn})"
                         )
 
+                # Product trend queries
+                if "product" in query_lower and ("declining" in query_lower or "growing" in query_lower or "trend" in query_lower):
+                    monthly_product_revenue = active_df.groupby([active_df['date'].dt.strftime('%B'), 'product'])['revenue'].sum().unstack(fill_value=0)
+                    
+                    # Ensure months are in order
+                    month_order = ['July', 'August', 'September'] # Assuming Q3
+                    monthly_product_revenue = monthly_product_revenue.reindex(month_order).fillna(0)
+
+                    declining_products = []
+                    growing_products = []
+
+                    for product in monthly_product_revenue.columns:
+                        revenue_series = monthly_product_revenue[product]
+                        if len(revenue_series) > 1:
+                            # Simple trend: compare first and last non-zero revenue
+                            non_zero_rev = revenue_series[revenue_series > 0]
+                            if len(non_zero_rev) > 1:
+                                trend_is_declining = non_zero_rev.iloc[-1] < non_zero_rev.iloc[0]
+                                trend_is_growing = non_zero_rev.iloc[-1] > non_zero_rev.iloc[0]
+
+                                if trend_is_declining or trend_is_growing:
+                                    # Create a string showing all monthly revenues for context
+                                    monthly_str = " | ".join([f"{month[:3]}: ${rev:,.2f}" for month, rev in revenue_series.items()])
+                                    
+                                    if trend_is_declining:
+                                        declining_products.append(f"- {product}: ({monthly_str})")
+                                    elif trend_is_growing:
+                                        growing_products.append(f"- {product}: ({monthly_str})")
+
+                    if "declining" in query_lower and declining_products:
+                        results.append("\nProducts with declining revenue trend:")
+                        results.extend(declining_products)
+                    
+                    if "growing" in query_lower and growing_products:
+                        results.append("\nProducts with growing revenue trend:")
+                        results.extend(growing_products)
+
                 # Time-based queries
                 if month_numbers or "month" in query_lower or "trend" in query_lower or "growth" in query_lower:
                     monthly_source_df = filtered_df if month_numbers else self.df
@@ -200,6 +237,13 @@ class FinancialAgentLangChain:
                         'quantity': 'total_quantity',
                         'product': 'transaction_count'
                     }).reset_index().sort_values('month_number')
+
+                    # Ensure all months in Q3 are present, filling missing ones with 0
+                    all_q3_months = pd.DataFrame({
+                        'month_number': [7, 8, 9],
+                        'month_name': ['July', 'August', 'September']
+                    })
+                    monthly_summary = pd.merge(all_q3_months, monthly_summary, on=['month_number', 'month_name'], how='left').fillna(0)
 
                     if month_numbers:
                         monthly_summary = monthly_summary[monthly_summary['month_number'].isin(month_numbers)]
@@ -366,6 +410,27 @@ class FinancialAgentLangChain:
             except Exception as e:
                 return f"Error forecasting: {str(e)}"
 
+        def calculator(expression: str) -> str:
+            """
+            A simple calculator to evaluate mathematical expressions.
+            Supports +, -, *, /, and parentheses.
+            Example: "100 * (1 + 0.25)"
+            """
+            try:
+                # Sanitize expression
+                allowed_chars = "0123456789.+-*/() "
+                if any(c not in allowed_chars for c in expression):
+                    return f"Error: Invalid characters in expression: {expression}"
+
+                # Avoid security issues with eval
+                if "__" in expression:
+                    return "Error: Invalid expression."
+
+                result = eval(expression, {'__builtins__': None}, {})
+                return f"Result of '{expression}': {result}"
+            except Exception as e:
+                return f"Error calculating '{expression}': {str(e)}"
+
         # Create tool list
         tools = [
             Tool(
@@ -387,6 +452,11 @@ class FinancialAgentLangChain:
                 name="ForecastRevenue",
                 func=forecast_revenue,
                 description="Use Prophet ML model to forecast future revenue. Default is 90 days (Q4 forecast)."
+            ),
+            Tool(
+                name="Calculator",
+                func=calculator,
+                description="A simple calculator to evaluate mathematical expressions. Use for calculations like percentage change, ratios, etc. Example: '(120-100)/100 * 100' for percentage increase."
             )
         ]
 
@@ -437,6 +507,12 @@ class FinancialAgentLangChain:
 
         if any(token.startswith("sept") for token in tokens) and 9 not in months_found:
             months_found.append(9)
+
+        # Handle month ranges like "July to September"
+        if len(set(months_found)) == 2 and (' to ' in query_lower or '-' in query_lower):
+            start_month, end_month = min(months_found), max(months_found)
+            if start_month < end_month:
+                months_found.extend(range(start_month + 1, end_month))
 
         return sorted(set(months_found))
 
@@ -554,13 +630,23 @@ class FinancialAgentLangChain:
             scoped_df = self.df[self.df['date'].dt.month.isin(month_numbers)] if month_numbers else self.df
 
             # Decide which tools to call based on keywords
-            if any(word in query_lower for word in ['top', 'product', 'revenue', 'category', 'segment', 'month', 'trend']):
+            if any(word in query_lower for word in ['top', 'product', 'revenue', 'category', 'segment', 'month', 'trend', 'percentage', 'increase', 'decrease', 'difference', 'ratio', 'vs', 'compare', 'growth']):
                 tool_result = self.tools[0].func(user_message)
                 tools_used.append({'tool': 'QuerySalesData', 'input': user_message, 'output': tool_result})
                 tool_outputs.append(tool_result)
 
                 # Create citation dataframe based on query type
-                if 'product' in query_lower or 'top' in query_lower:
+                if ('declining' in query_lower or 'growing' in query_lower) and 'product' in query_lower:
+                    # Show monthly product breakdown
+                    if not scoped_df.empty:
+                        monthly_product_revenue = scoped_df.groupby([scoped_df['date'].dt.strftime('%B'), 'product'])['revenue'].sum().unstack(fill_value=0)
+                        # Ensure months are in order
+                        month_order = ['July', 'August', 'September'] # Assuming Q3
+                        citation_dataframe = monthly_product_revenue.reindex(month_order).fillna(0)
+                        # Format all columns as currency
+                        for col in citation_dataframe.columns:
+                            citation_dataframe[col] = citation_dataframe[col].apply(lambda x: f"${x:,.2f}")
+                elif 'product' in query_lower or 'top' in query_lower:
                     # Show aggregated product revenue
                     if not scoped_df.empty:
                         citation_dataframe = scoped_df.groupby('product').agg({
@@ -639,6 +725,34 @@ class FinancialAgentLangChain:
                 tools_used.append({'tool': 'ForecastRevenue', 'input': '90 days (Q4)', 'output': tool_result})
                 tool_outputs.append(tool_result)
 
+            # Decide if a calculation is needed
+            if any(word in query_lower for word in ['percentage', 'increase', 'decrease', 'difference', 'ratio', 'vs', 'compare', 'growth']):
+                # The other tools already provide a lot of data.
+                # We can ask the LLM to formulate a calculation based on the user query and the data we've already fetched.
+                calc_context = "\n\n".join(tool_outputs)
+                if calc_context: # Only try to calculate if there is context
+                    calc_prompt = f"""Based on the user query "{user_message}" and the following data, what is the specific mathematical expression to calculate the answer?
+
+Data:
+{calc_context}
+
+- Only return the mathematical expression.
+- If no calculation is needed or possible, return "N/A".
+- Example: to find percentage increase from 100 to 120, return "(120 - 100) / 100 * 100".
+- Use the numbers directly from the data provided.
+
+Expression:"""
+                    calc_response = self.llm.generate_content(calc_prompt)
+                    calc_expression = getattr(calc_response, 'text', 'N/A').strip().replace('`', '')
+
+                    if calc_expression and calc_expression.lower() != "n/a":
+                        # Find calculator tool
+                        calculator_tool = next((t for t in self.tools if t.name == "Calculator"), None)
+                        if calculator_tool:
+                            tool_result = calculator_tool.func(calc_expression)
+                            tools_used.append({'tool': 'Calculator', 'input': calc_expression, 'output': tool_result})
+                            tool_outputs.append(tool_result)
+
             # Check if user wants to see specific data visualization
             pandas_code = None
             if any(word in query_lower for word in ['show me', 'display', 'visualize', 'breakdown', 'detailed']):
@@ -668,29 +782,22 @@ Here is the data retrieved from our analysis tools:
 
 {context}
 
-Based on this data, provide a clear, comprehensive answer to the user's question.
+Based on this data, provide a clear, comprehensive, and well-structured answer to the user's question using Markdown.
+- Use headings, subheadings, lists, and tables to structure the information.
+- Highlight key metrics and insights using bolding or other Markdown emphasis.
+- Ensure the response is easy to read and process by Streamlit's `st.markdown()` function.
+- Include specific numbers and metrics from the tool output.
 - Focus on the relevant timeframe or filters implied by the data.
-- Include specific numbers and metrics.
-- Use plain text sentences without markdown formatting (no italics, bold, or bracketed citations).
-- Keep the response concise but thorough.
+- Do not include bracketed citations like [1] or [2] in the response.
 
-Your response (plain text only):"""
+Your response should be in Markdown format:"""
 
             # Generate response
             response = self.llm.generate_content(prompt)
             final_response = getattr(response, 'text', '') or ''
-            final_response = final_response.replace('*', '')
-            final_response = final_response.replace('\u2028', '\n').replace('\u2029', '\n')
-            final_response = re.sub(r'\s*\[\d+\]', '', final_response)
-            cleaned_lines = []
-            for line in final_response.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                stripped = re.sub(r'\s{2,}', ' ', stripped)
-                stripped = stripped.replace(' ,', ',').replace(' .', '.')
-                cleaned_lines.append(stripped)
-            final_response = "\n".join(cleaned_lines).strip()
+            # The response is expected to be in Markdown, so minimal cleaning is needed.
+            # Remove any bracketed citations as they are handled separately.
+            final_response = re.sub(r'\s*\[\d+\]', '', final_response).strip()
 
             # Update chat history
             self.chat_history.append({'role': 'user', 'content': user_message})

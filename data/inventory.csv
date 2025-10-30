@@ -1,0 +1,51 @@
+sku,product_name,current_stock,reorder_point,lead_time_days,cost_per_unit,last_30_days_sales,category
+SKU-001,4K Monitor,53,60,21,132.38,15,Electronics
+SKU-002,Wireless Keyboard,31,27,13,284.13,27,Accessories
+SKU-003,Ergonomic Mouse,58,21,15,431.82,82,Accessories
+SKU-004,Noise-Canceling Headset,29,37,10,196.82,17,Electronics
+SKU-005,USB-C Docking Station,46,35,6,111.91,17,Electronics
+SKU-006,Laptop Stand,28,34,5,478.84,58,Accessories
+SKU-007,Portable SSD 1TB,50,28,11,248.74,43,Electronics
+SKU-008,Conference Speaker,107,26,13,51.36,4,Electronics
+SKU-009,Smart Webcam,61,54,6,30.72,71,Electronics
+SKU-010,Wireless Presenter,46,25,11,60.2,46,Accessories
+SKU-011,Mechanical Keyboard,60,57,7,304.34,20,Accessories
+SKU-012,HDMI Cable 6ft,15,47,16,381.97,73,Accessories
+SKU-013,USB-C Cable 3ft,61,22,12,207.55,64,Accessories
+SKU-014,Bluetooth Adapter,47,21,18,38.45,42,Accessories
+SKU-015,Surge Protector,73,25,15,188.43,7,Accessories
+SKU-016,Laser Printer,53,33,9,478.17,22,Electronics
+SKU-017,All-in-One Ink,39,34,15,257.98,28,Office Supplies
+SKU-018,Printer Paper Ream,72,52,15,466.36,45,Office Supplies
+SKU-019,Whiteboard Markers,74,58,10,414.36,50,Office Supplies
+SKU-020,Desk Organizer,23,21,12,13.91,88,Office Supplies
+SKU-021,Filing Folders,51,55,6,348.32,25,Office Supplies
+SKU-022,Stapler Set,37,32,9,329.93,64,Office Supplies
+SKU-023,Label Maker,71,54,21,261.68,60,Office Supplies
+SKU-024,Shipping Boxes Medium,58,46,11,134.31,58,Office Supplies
+SKU-025,Bubble Mailers,51,34,9,310.71,56,Office Supplies
+SKU-026,Packing Tape,64,48,18,61.1,24,Office Supplies
+SKU-027,Desk Lamp,76,57,16,213.49,57,Electronics
+SKU-028,Wireless Charger,30,37,12,222.43,31,Electronics
+SKU-029,Portable Projector,31,20,21,458.22,113,Electronics
+SKU-030,LED Video Light,23,30,11,421.46,54,Electronics
+SKU-031,Smart Thermostat,62,47,14,132.69,53,Electronics
+SKU-032,WiFi Router,52,41,5,244.53,35,Electronics
+SKU-033,Network Switch 16-Port,16,37,11,92.73,93,Electronics
+SKU-034,Backup Battery UPS,34,29,5,438.8,45,Electronics
+SKU-035,Portable Power Bank,35,33,14,418.95,40,Accessories
+SKU-036,Phone Stand,43,41,16,149.22,102,Accessories
+SKU-037,Cable Management Kit,12,26,12,309.76,106,Accessories
+SKU-038,Desk Mat,43,25,6,295.63,99,Accessories
+SKU-039,Notebook Set,42,44,10,80.56,16,Office Supplies
+SKU-040,Sticky Notes Pack,43,26,14,368.02,33,Office Supplies
+SKU-041,Gel Pens,111,42,10,262.82,4,Office Supplies
+SKU-042,Executive Notebook,49,42,19,375.62,49,Office Supplies
+SKU-043,Planner 2025,16,58,16,258.56,80,Office Supplies
+SKU-044,Desk Chair,10,36,18,8.77,90,Electronics
+SKU-045,Ergonomic Footrest,16,22,8,161.34,49,Accessories
+SKU-046,Monitor Arm,67,49,12,17.68,26,Accessories
+SKU-047,Document Scanner,79,54,8,446.57,12,Electronics
+SKU-048,Thermal Label Printer,42,27,11,422.82,91,Electronics
+SKU-049,Barcode Scanner,64,44,21,400.63,63,Electronics
+SKU-050,Retail POS Tablet,49,25,21,153.49,52,Electronics

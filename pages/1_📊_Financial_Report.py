@@ -103,6 +103,33 @@ if 'report_generated' not in st.session_state:
     st.session_state.report_generated = False
 if 'figures' not in st.session_state:
     st.session_state.figures = None
+if 'auto_load_attempted' not in st.session_state:
+    st.session_state.auto_load_attempted = False
+if 'data_load_error' not in st.session_state:
+    st.session_state.data_load_error = None
+
+
+def attempt_sales_data_load() -> None:
+    """Instantiate the financial agent and load sales data."""
+    st.session_state.auto_load_attempted = True
+    st.session_state.data_load_error = None
+    st.session_state.agent = FinancialAgentLangChain(api_key=api_key, data_path=str(data_path))
+
+    result = st.session_state.agent.load_data()
+    if result.get('success'):
+        st.session_state.data_loaded = True
+        st.session_state.chat_messages = []
+        st.session_state.report_generated = False
+        st.session_state.figures = None
+    else:
+        st.session_state.agent = None
+        st.session_state.data_loaded = False
+        st.session_state.data_load_error = result.get('message', 'Unknown error while loading data.')
+
+
+if not st.session_state.data_loaded and not st.session_state.auto_load_attempted:
+    with st.spinner("Loading sales data..."):
+        attempt_sales_data_load()
 
 # Sidebar - System Status
 with st.sidebar:
@@ -349,7 +376,7 @@ else:
             send_button = st.button("📤 Send", use_container_width=True, type="primary")
 
         # Quick action buttons
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             if st.button("📊 Top Products", use_container_width=True):
@@ -362,13 +389,25 @@ else:
                 send_button = True
 
         with col3:
+            if st.button("💼 Best Segment", use_container_width=True):
+                user_input = "Which customer segment generated the most revenue?"
+                send_button = True
+
+        col4, col5, col6 = st.columns(3)
+
+        with col4:
             if st.button("🔮 Forecast Q4", use_container_width=True):
                 user_input = "Forecast Q4 revenue using Prophet and tell me the expected growth rate."
                 send_button = True
 
-        with col4:
-            if st.button("💼 Best Segment", use_container_width=True):
-                user_input = "Which customer segment generated the most revenue?"
+        with col5:
+            if st.button("🎧 Find Headphones Sales", use_container_width=True):
+                user_input = "Find all sales for 'Wireless Headphones'."
+                send_button = True
+
+        with col6:
+            if st.button("📉 Declining Products", use_container_width=True):
+                user_input = "What products are declining in revenue?"
                 send_button = True
 
         # Process user input
@@ -475,16 +514,9 @@ else:
             st.markdown(report['response'])
 
             # Action buttons
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Generate New Report", use_container_width=True):
-                    st.session_state.report_generated = False
-                    st.rerun()
-
-            with col2:
-                if st.button("💬 Ask Follow-up Questions", use_container_width=True):
-                    st.session_state.report_generated = False
-                    st.rerun()
+            if st.button("🔄 Generate New Report", use_container_width=True):
+                st.session_state.report_generated = False
+                st.rerun()
 
     # TAB 3: Visualizations
     with tab3:

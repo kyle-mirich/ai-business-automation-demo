@@ -24,6 +24,8 @@ st.divider()
 # Demo cards
 st.header("Interactive Demos")
 
+st.markdown("#### Agent Sandboxes")
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -67,61 +69,22 @@ with col2:
 
 with col3:
     st.markdown("""
-    ### 📦 Inventory Optimizer (Coming Soon)
+    ### 📦 Inventory Optimizer
 
-    Analyzes inventory levels, forecasts demand with **Prophet**,
-    and generates reorder recommendations.
+    End-to-end inventory planning with **Prophet** demand forecasting
+    and **Gemini** reorder recommendations via LangChain.
 
     **Features:**
-    - Inventory analysis
-    - Demand forecasting
-    - AI recommendations
-    - Priority scoring
+    - Stock health diagnostics
+    - Per-SKU demand forecasts
+    - AI reorder plans with reasoning
+    - Cost transparency
 
     **Tech Stack:**
-    `Prophet` `Gemini` `Pandas`
+    `LangChain` `Gemini` `Prophet` `Plotly`
     """)
 
-    st.button("🔒 Coming Soon", disabled=True, use_container_width=True)
-
-st.divider()
-
-# Features section
-st.header("Why This Demo?")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown("""
-    **✨ Real AI Calls**
-
-    Not mocked - actual Gemini API
-    responses every time
-    """)
-
-with col2:
-    st.markdown("""
-    **📊 Pre-loaded Data**
-
-    Zero errors during demos,
-    works perfectly every time
-    """)
-
-with col3:
-    st.markdown("""
-    **🔍 Behind the Scenes**
-
-    See prompts, responses,
-    and agent decisions live
-    """)
-
-with col4:
-    st.markdown("""
-    **🚀 Single Deployment**
-
-    Pure Python Streamlit app,
-    no microservices needed
-    """)
+    st.page_link("pages/3_📦_Inventory_Optimizer.py", label="🚀 Launch Inventory Optimizer", use_container_width=True)
 
 st.divider()
 
@@ -151,27 +114,16 @@ st.markdown("""
 with st.sidebar:
     st.header("ℹ️ About")
     st.markdown("""
-    This is a portfolio demo showcasing AI agents automating real business workflows.
-
-    **Current Status:**
-    - ✅ Demo 1: Financial Report (Complete)
-    - ✅ Demo 2: Support Triage (Complete)
-    - ⏳ Demo 3: Inventory Optimizer (Coming)
-
-    **Setup Required:**
-    1. Get a Google Gemini API key
-    2. Add to `.env` file
-    3. Install dependencies
-    4. Run `streamlit run app.py`
-
-    **No file uploads needed** - all data is pre-loaded!
+    This is a portfolio demo by Kyle Mirich showcasing AI agents automating real business workflows.
     """)
 
     st.divider()
 
     st.markdown("""
     **Quick Links:**
-    - [Google AI Studio](https://makersuite.google.com/app/apikey)
-    - [Streamlit Docs](https://docs.streamlit.io)
-    - [Prophet Docs](https://facebook.github.io/prophet/)
+    - [Kyle's Portfolio](https://kyle-mirich.vercel.app/)
+    - [Kyle's Github](https://github.com/kyle-mirich)
     """)
+
+st.divider()
+

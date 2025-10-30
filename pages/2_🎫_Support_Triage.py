@@ -63,7 +63,7 @@ with TICKETS_PATH.open("r", encoding="utf-8") as f:
 
 # Session state setup
 if "support_orchestrator" not in st.session_state:
-    st.session_state.support_orchestrator = SupportAgentOrchestrator(api_key=api_key, model="gemini-2.5-flash-lite")
+    st.session_state.support_orchestrator = SupportAgentOrchestrator(api_key=api_key, model="gemini-2.5-flash")
 
 if "support_results" not in st.session_state:
     st.session_state.support_results: List[Dict] = []
