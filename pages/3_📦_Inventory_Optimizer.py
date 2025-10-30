@@ -146,12 +146,12 @@ if run_analysis:
             },
         )
 
-        progress_box.info("Step 3/4 • Forecasting 30-day demand (Prophet)...")
+        progress_box.info("Forecasting 30-day demand (Prophet)...")
         forecast_df = agent.forecast_demand(horizon_days=30)
         st.session_state.inventory_forecast = forecast_df
         log_step("Forecast demand", "success", {"models_built": len(forecast_df)})
 
-        progress_box.info("Step 4/4 • Generating Gemini recommendations...")
+        progress_box.info("Generating Gemini recommendations...")
         recommendations = agent.generate_recommendations()
         st.session_state.inventory_recommendations = recommendations
         log_step(
