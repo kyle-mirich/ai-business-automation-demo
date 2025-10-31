@@ -1,44 +1,34 @@
 # Web Framework
-streamlit>=1.31.0
+streamlit
 
 # Data Processing
-pandas>=2.1.0
-numpy>=1.26.0
+pandas
+numpy
 
 # Visualization
-plotly>=5.18.0
+plotly
 
 # Machine Learning / Forecasting
-prophet>=1.1.5
+prophet
 
 # AI/LLM Libraries
-google-generativeai>=0.8.0
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-google-genai>=2.0.0
-langchain-community>=0.3.0
-langchain-text-splitters>=0.3.0
-langgraph>=0.2.53
+google-generativeai
+langchain
+langchain-core
+langchain-google-genai
+langchain-community
+langchain-text-splitters
+langgraph
 
 # Environment Management
-python-dotenv>=1.0.0
+python-dotenv
 
 # Testing (development only)
-pytest>=7.4.0
+pytest
 
 # RAG Chatbot Dependencies
-chromadb>=0.4.22
-duckduckgo-search>=4.1.0
-pypdf>=4.0.0
-tiktoken==0.8.0
-arxiv>=2.1.0
-
-# Embedding model dependencies (order matters - install in this order)
-torch>=2.0.0,<2.3.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
-transformers>=4.30.0,<5.0.0
-tokenizers>=0.13.0
-huggingface-hub>=0.16.0,<1.0.0
-sentence-transformers>=2.2.0,<3.0.0
-safetensors>=0.3.0
+chromadb
+duckduckgo-search
+pypdf
+tiktoken
+arxiv

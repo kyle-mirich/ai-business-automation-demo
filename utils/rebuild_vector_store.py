@@ -76,7 +76,8 @@ def rebuild_vector_store():
     print("🧠 Rebuilding vector store (this may take a few minutes)...")
     print("   - Loading PDFs")
     print("   - Splitting into chunks")
-    print("   - Generating embeddings (using local HuggingFace model)")
+    embedding_msg = "HuggingFace model" if agent.embedding_type == "huggingface" else "Google Gemini API"
+    print(f"   - Generating embeddings (using {embedding_msg})")
     print("   - Storing in ChromaDB")
     print()
 
