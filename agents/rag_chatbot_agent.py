@@ -8,7 +8,11 @@ Features:
 - Source citations
 """
 
-from typing import List, Dict, Any, Optional, Generator
+import html
+import json
+import re
+import shutil
+from typing import List, Dict, Any, Optional, Generator, Tuple
 from pathlib import Path
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -71,6 +75,7 @@ class RAGChatbotAgent:
 
         # Tracking
         self.last_sources = []
+        self.last_load_result: Optional[Dict[str, Any]] = None
 
     def load_documents(self, force_reload: bool = False) -> Dict[str, Any]:
         """
@@ -83,9 +88,14 @@ class RAGChatbotAgent:
             Status dict with success, message, and stats
         """
         try:
-            # Setup persist directory
-            persist_directory = self.documents_path.parent / "chroma_db"
+            # Setup persist directory (inside papers folder)
+            persist_directory = self.documents_path / "chroma_db"
+            if force_reload and persist_directory.exists():
+                shutil.rmtree(persist_directory)
             persist_directory.mkdir(parents=True, exist_ok=True)
+            if force_reload:
+                self.vectorstore = None
+                self.retriever = None
 
             # Check if vector store already exists
             chroma_file = persist_directory / "chroma.sqlite3"
@@ -100,7 +110,7 @@ class RAGChatbotAgent:
                 try:
                     collection = self.vectorstore._collection
                     doc_count = collection.count()
-                except:
+                except Exception:
                     doc_count = 0
 
                 self.retriever = self.vectorstore.as_retriever(
@@ -108,12 +118,14 @@ class RAGChatbotAgent:
                     search_kwargs={"k": 4}
                 )
 
-                return {
+                result = {
                     "success": True,
                     "message": f"Loaded existing vector database with {doc_count} document chunks",
                     "chunk_count": doc_count,
                     "is_new": False
                 }
+                self.last_load_result = result
+                return result
 
             # Check if PDFs exist
             if not self.documents_path.exists():
@@ -143,14 +155,33 @@ class RAGChatbotAgent:
                     "message": "Failed to load PDF documents"
                 }
 
+            # Normalize metadata
+            resolved_base = self.documents_path.resolve()
+            for doc in documents:
+                source_path = Path(doc.metadata.get("source", resolved_base))
+                doc.metadata["source"] = str(source_path.resolve())
+
             # Split documents into chunks
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
+                chunk_size=1400,
+                chunk_overlap=280,
                 length_function=len,
                 separators=["\n\n", "\n", ". ", " ", ""]
             )
             chunks = text_splitter.split_documents(documents)
+
+            for chunk in chunks:
+                meta = chunk.metadata
+                source_path = Path(meta.get("source", resolved_base)).resolve()
+                meta["source"] = str(source_path)
+                if "page" in meta:
+                    try:
+                        page_idx = int(meta["page"])
+                        meta["page"] = page_idx + 1
+                    except Exception:
+                        pass
+                if "chunk_index" not in meta:
+                    meta["chunk_index"] = meta.get("seq_num")
 
             # Create vector store
             self.vectorstore = Chroma.from_documents(
@@ -159,6 +190,13 @@ class RAGChatbotAgent:
                 collection_name=self.collection_name,
                 persist_directory=str(persist_directory)
             )
+            self.vectorstore.persist()
+
+            try:
+                collection = self.vectorstore._collection
+                doc_count = collection.count()
+            except Exception:
+                doc_count = len(chunks)
 
             # Setup retriever
             self.retriever = self.vectorstore.as_retriever(
@@ -166,20 +204,24 @@ class RAGChatbotAgent:
                 search_kwargs={"k": 4}
             )
 
-            return {
+            result = {
                 "success": True,
-                "message": f"Successfully loaded {len(pdf_files)} papers and created {len(chunks)} chunks",
+                "message": f"Successfully loaded {len(pdf_files)} papers and created {doc_count} chunks",
                 "pdf_count": len(pdf_files),
-                "chunk_count": len(chunks),
+                "chunk_count": doc_count,
                 "is_new": True,
                 "papers": [pdf.name for pdf in pdf_files]
             }
+            self.last_load_result = result
+            return result
 
         except Exception as e:
-            return {
+            result = {
                 "success": False,
                 "message": f"Error loading documents: {str(e)}"
             }
+            self.last_load_result = result
+            return result
 
     def chat_stream(self, message: str) -> Generator[Dict[str, Any], None, None]:
         """
@@ -199,18 +241,13 @@ class RAGChatbotAgent:
             return
 
         try:
-            # Retrieve relevant documents
-            docs = self.retriever.invoke(message)
+            docs, scores = self._retrieve_with_scores(message)
 
-            # Extract and yield sources
-            sources = []
-            for doc in docs:
-                source_info = {
-                    "content": doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content,
-                    "source": Path(doc.metadata.get("source", "Unknown")).name,
-                    "page": doc.metadata.get("page", "N/A")
-                }
-                sources.append(source_info)
+            # Extract and yield sources enriched with highlights
+            sources = [
+                self._build_source_payload(doc, scores[idx], message, rank=idx + 1)
+                for idx, doc in enumerate(docs)
+            ]
 
             self.last_sources = sources
 
@@ -304,3 +341,142 @@ Please provide a helpful answer based on the research papers. Always cite your s
                 pass
 
         return stats
+
+    def _retrieve_with_scores(self, query: str, k: int = 4) -> Tuple[List, List[Optional[float]]]:
+        """
+        Retrieve documents alongside similarity scores when available.
+        """
+        docs: List = []
+        scores: List[Optional[float]] = []
+
+        if self.vectorstore and hasattr(self.vectorstore, "similarity_search_with_relevance_scores"):
+            try:
+                results = self.vectorstore.similarity_search_with_relevance_scores(query, k=k)
+                for item in results:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        doc, score = item
+                    else:
+                        doc, score = item, None
+                    docs.append(doc)
+                    if score is None:
+                        scores.append(None)
+                    else:
+                        scores.append(float(score))
+            except Exception:
+                docs = []
+                scores = []
+
+        if not docs:
+            raw_docs = self.retriever.invoke(query)
+            docs = list(raw_docs)
+            scores = [None] * len(docs)
+
+        return docs, scores
+
+    def _build_source_payload(
+        self,
+        doc,
+        score: Optional[float],
+        query: str,
+        rank: int,
+    ) -> Dict[str, Any]:
+        """
+        Construct enriched payload for a retrieved document chunk.
+        """
+        page_content = doc.page_content or ""
+        metadata = doc.metadata or {}
+        source_path = metadata.get("source") or "Unknown"
+        page = metadata.get("page", "N/A")
+
+        path_obj = Path(source_path)
+        filename = path_obj.name or str(source_path)
+        try:
+            relative_href = path_obj.relative_to(self.documents_path)
+        except (ValueError, RuntimeError):
+            try:
+                relative_href = path_obj.relative_to(self.documents_path.resolve())
+            except (ValueError, RuntimeError):
+                relative_href = path_obj
+
+        source_url = None
+        if isinstance(relative_href, Path):
+            relative_str = relative_href.as_posix()
+        else:
+            relative_str = str(relative_href)
+
+        if relative_str:
+            page_fragment = ""
+            try:
+                page_int = int(page)
+                page_fragment = f"#page={page_int}"
+            except Exception:
+                page_fragment = ""
+
+            if not relative_str.startswith(("http://", "https://", "/")):
+                relative_str = f"data/papers/{relative_str}"
+            source_url = f"./{relative_str}{page_fragment}"
+
+        return {
+            "rank": rank,
+            "source": filename,
+            "page": page,
+            "score": score,
+            "chunk_excerpt": self._build_plain_excerpt(page_content),
+            "highlighted_excerpt": self._build_highlight_excerpt(page_content, query),
+            "chunk_full": page_content,
+            "metadata": metadata,
+            "source_url": source_url if source_url else None,
+            "source_path": str(path_obj),
+        }
+
+    @staticmethod
+    def _build_plain_excerpt(text: str, limit: int = 420) -> str:
+        """Return a trimmed plain-text excerpt for quick preview."""
+        text = text.strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "..."
+
+    def _build_highlight_excerpt(self, text: str, query: str, window: int = 760) -> str:
+        """Generate HTML-safe excerpt with highlighted query terms."""
+        clean_text = text.strip()
+        if not clean_text:
+            return ""
+
+        keywords = self._extract_keywords(query)
+        for keyword in keywords:
+            pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+            match = pattern.search(clean_text)
+            if match:
+                start = max(0, match.start() - window // 2)
+                end = min(len(clean_text), match.end() + window // 2)
+                excerpt = clean_text[start:end]
+                highlighted = self._render_highlight(excerpt, pattern)
+                prefix = "..." if start > 0 else ""
+                suffix = "..." if end < len(clean_text) else ""
+                return prefix + highlighted + suffix
+
+        excerpt = clean_text[:window]
+        if len(clean_text) > window:
+            excerpt += "..."
+        return html.escape(excerpt)
+
+    def _extract_keywords(self, query: str) -> List[str]:
+        """Extract meaningful keywords from the user query."""
+        raw_tokens = re.findall(r"\w+", query.lower())
+        unique_tokens = sorted({token for token in raw_tokens if len(token) > 3}, key=len, reverse=True)
+        if not unique_tokens:
+            return [query.strip()] if query.strip() else []
+        return unique_tokens
+
+    @staticmethod
+    def _render_highlight(text: str, pattern: re.Pattern) -> str:
+        """Escape text and wrap matched terms in <mark> tags."""
+        result_parts: List[str] = []
+        last_idx = 0
+        for match in pattern.finditer(text):
+            result_parts.append(html.escape(text[last_idx:match.start()]))
+            result_parts.append(f"<mark>{html.escape(match.group(0))}</mark>")
+            last_idx = match.end()
+        result_parts.append(html.escape(text[last_idx:]))
+        return "".join(result_parts)

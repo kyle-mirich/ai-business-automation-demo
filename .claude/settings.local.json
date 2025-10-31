@@ -8,7 +8,10 @@
       "Bash(python -m pip install:*)",
       "Bash(uv pip install:*)",
       "Bash(uv pip uninstall:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(where:*)",
+      "Bash(.venv/Scripts/python.exe test_rag_agent.py)"
     ],
     "deny": [],
     "ask": []
