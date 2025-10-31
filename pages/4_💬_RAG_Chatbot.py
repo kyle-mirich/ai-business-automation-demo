@@ -263,9 +263,12 @@ def render_source_details(
             # Build GitHub link button HTML
             github_link_html = ""
             if source_url:
+                # Escape the URL to prevent breaking HTML attributes
+                escaped_url = html.escape(source_url, quote=True)
+                escaped_doc_name = html.escape(doc_name)
                 github_link_html = f"""
                 <div style="margin: 10px 0;">
-                    <a href="{source_url}" target="_blank" style="
+                    <a href="{escaped_url}" target="_blank" rel="noopener noreferrer" style="
                         display: inline-block;
                         padding: 8px 16px;
                         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -276,26 +279,28 @@ def render_source_details(
                         transition: all 0.3s ease;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                     ">
-                        📄 View {html.escape(doc_name)} on GitHub (page {page_num})
+                        📄 View {escaped_doc_name} on GitHub (page {page_num})
                     </a>
                     <p style="font-size: 0.85em; color: #64748b; margin-top: 5px;">
-                        💡 Opens in GitHub's PDF viewer - manually navigate to page {page_num}
+                        💡 Opens in GitHub&apos;s PDF viewer - manually navigate to page {page_num}
                     </p>
                 </div>
                 """
 
-            # Build highlighted excerpt HTML
+            # Build highlighted excerpt HTML (highlight already contains safe HTML with <mark> tags)
             excerpt_html = ""
             if highlight:
+                # The highlight variable already contains HTML-escaped content with <mark> tags
+                # So we can use it directly
                 excerpt_html = f"""
                 <div style="margin: 10px 0;">
                     <strong>Relevant excerpt:</strong>
-                    <div style="margin-top: 5px;">{highlight}</div>
+                    <div style="margin-top: 5px; background: #fefce8; padding: 10px; border-radius: 6px; border-left: 3px solid #fbbf24;">{highlight}</div>
                 </div>
                 """
 
-            # Create collapsible HTML with details/summary
-            open_attr = 'open' if idx == 1 else ''
+            # Create collapsible HTML with details/summary (all collapsed by default)
+            open_attr = ''
             html_content = f"""
             <details {open_attr} style="
                 border: 1px solid #e2e8f0;
