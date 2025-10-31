@@ -136,6 +136,8 @@ if "rag_query_count" not in st.session_state:
     st.session_state.rag_query_count = 0
 if "used_prompts" not in st.session_state:
     st.session_state.used_prompts = set()
+if "rag_auto_rebuilt" not in st.session_state:
+    st.session_state.rag_auto_rebuilt = False
 
 # Suggested questions for foundational papers
 SUGGESTED_QUESTIONS = [
@@ -180,7 +182,7 @@ with st.sidebar:
     if st.session_state.rag_agent:
         stats = st.session_state.rag_agent.get_stats()
         st.metric("Document Chunks", f"{stats['total_chunks']:,}")
-        st.metric("Papers Loaded", "6 foundational AI papers")
+        st.metric("Papers Loaded", "12 foundational AI papers")
         st.metric("Conversation Turns", stats['conversation_length'] // 2 if stats['conversation_length'] > 0 else 0)
         if stats["total_chunks"] == 0:
             st.warning(
@@ -234,25 +236,7 @@ with st.sidebar:
 
     st.divider()
 
-    if st.session_state.rag_agent:
-        if st.button("♻️ Rebuild Vector Store", use_container_width=True):
-            with st.spinner("Re-indexing papers with fresh chunks..."):
-                result = st.session_state.rag_agent.load_documents(force_reload=True)
-            if result.get("success"):
-                st.session_state.rag_agent.last_load_result = result
-                st.success(
-                    f"Rebuilt vector store with {result.get('chunk_count', 0):,} chunks "
-                    f"from {result.get('pdf_count', 0)} papers."
-                )
-                st.session_state.chat_messages = []
-                st.session_state.rag_total_cost = 0.0
-                st.session_state.rag_query_count = 0
-                st.session_state.used_prompts = set()
-                st.info("Chat history cleared so responses use the refreshed embeddings.")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error(result.get("message", "Unable to rebuild vector store."))
+    st.info("💡 **To update the vector store:** Run `python utils/rebuild_vector_store.py` locally, then commit and push the changes.")
 
 # Main chat area header
 st.markdown("""
