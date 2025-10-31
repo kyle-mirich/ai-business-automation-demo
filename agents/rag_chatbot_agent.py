@@ -430,7 +430,7 @@ Please provide a helpful answer based on the research papers. Always cite your s
                 if page_int:
                     query_parts.append(f"page={page_int}")
                 query_string = "&".join(query_parts)
-                source_url = f"./5_Source_Viewer?{query_string}"
+                source_url = f"./Source_Viewer?{query_string}"
 
         return {
             "rank": rank,

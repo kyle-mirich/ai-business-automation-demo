@@ -65,7 +65,10 @@ def test_rag_agent():
                 print(f"\n   Source {i}:")
                 print(f"   - File: {source['source']}")
                 print(f"   - Page: {source['page']}")
-                print(f"   - Content preview: {source['content'][:100]}...")
+                print(f"   - URL: {source.get('source_url', 'N/A')}")
+                print(f"   - Score: {source.get('score', 'N/A')}")
+                chunk_excerpt = source.get('chunk_excerpt', source.get('content', ''))
+                print(f"   - Content preview: {chunk_excerpt[:100]}...")
 
         elif chunk["type"] == "token":
             full_response += chunk["content"]

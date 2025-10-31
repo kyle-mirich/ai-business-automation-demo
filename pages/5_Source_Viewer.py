@@ -31,9 +31,15 @@ def _get_first(values):
     return values
 
 
-query_params = st.experimental_get_query_params()
-raw_paper = _get_first(query_params.get("paper"))
-raw_page = _get_first(query_params.get("page"))
+# Get query parameters
+try:
+    raw_paper = st.query_params.get("paper", None)
+    raw_page = st.query_params.get("page", None)
+except Exception:
+    # Fallback for older Streamlit versions
+    query_params = st.experimental_get_query_params()
+    raw_paper = _get_first(query_params.get("paper"))
+    raw_page = _get_first(query_params.get("page"))
 
 if not raw_paper:
     st.error("Missing 'paper' query parameter.")
@@ -77,12 +83,15 @@ if raw_page:
         page_number = 1
 
 st.title(candidate_path.name)
-st.caption(f"Source located at: {candidate_path.relative_to(PAPERS_DIR)} (page {page_number})")
+st.caption(f"Source located at: {candidate_path.relative_to(PAPERS_DIR)} • Viewing page {page_number}")
 
 with st.spinner("Loading PDF source..."):
     pdf_bytes = load_pdf_bytes(str(candidate_path))
+
+# Encode PDF as base64
 encoded_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
+# Create iframe with PDF viewer
 iframe_html = f"""
     <iframe
         src="data:application/pdf;base64,{encoded_pdf}#page={page_number}"
@@ -94,11 +103,12 @@ iframe_html = f"""
 """
 components_html(iframe_html, height=900, scrolling=True)
 
+# Download button
 st.download_button(
-    label="Download PDF",
+    label="📥 Download PDF",
     data=pdf_bytes,
     file_name=candidate_path.name,
     mime="application/pdf",
 )
 
-st.markdown("[Back to RAG Chatbot](./4_%F0%9F%92%AC_RAG_Chatbot)")
+st.markdown("[← Back to RAG Chatbot](./RAG_Chatbot)")

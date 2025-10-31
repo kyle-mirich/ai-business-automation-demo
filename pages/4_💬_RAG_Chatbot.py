@@ -285,76 +285,55 @@ The chatbot retrieves answers from research papers and provides citations.
 """)
 
 
-def render_source_details(sources, key_prefix: str, default_expanded: bool = False) -> None:
-    """Render source inspection UI with hyperlinks and highlighted context."""
+# Function to render source details
+def render_source_details(
+    sources: List[Dict[str, Any]],
+    key_prefix: str,
+    default_expanded: bool = False,
+) -> None:
+    """Show retrieved chunks with full text so users can see raw context."""
     if not sources:
         return
 
-    with st.expander(f"📚 Sources ({len(sources)} documents cited)", expanded=default_expanded):
-        link_html = []
-        for idx, source in enumerate(sources, 1):
-            doc_name = source.get("source", f"Source {idx}")
-            page = source.get("page", "N/A")
-            url = source.get("source_url")
-            label = f"{doc_name} (p. {page})"
-            if url:
-                link_html.append(
-                    f'<a href="{html.escape(url)}" target="_blank" rel="noopener">'
-                    f"{html.escape(label)}</a>"
+    for idx, source in enumerate(sources, 1):
+        doc_name = source.get('source', 'Document')
+        page = source.get('page', 'N/A')
+        source_url = source.get('source_url')
+
+        title = f"Source {idx}: `{doc_name}` (page {page})"
+        chunk_text = source.get("chunk_full") or source.get("content") or ""
+        highlight = source.get("highlighted_excerpt") or source.get("chunk_excerpt") or ""
+
+        with st.expander(title, expanded=default_expanded and idx == 1):
+            # Show clickable link to navigate to source viewer
+            if source_url:
+                paper_name = source.get('source', '')
+                page_num = source.get('page', 1)
+
+                from urllib.parse import quote
+                # Build the full navigation URL with current base
+                nav_url = f"Source_Viewer?paper={quote(paper_name)}&page={page_num}"
+
+                # Use st.link_button for proper navigation
+                st.link_button(
+                    f"📄 View {doc_name} (page {page_num})",
+                    nav_url,
+                    type="secondary"
                 )
-            else:
-                link_html.append(f"<span>{html.escape(label)}</span>")
+                st.markdown("---")
 
-        if link_html:
-            st.markdown(
-                '<div class="source-links">' + " • ".join(link_html) + "</div>",
-                unsafe_allow_html=True,
-            )
-
-        options = list(range(len(sources)))
-        if len(options) > 1:
-            option_labels = [
-                f"Source {idx}: {src.get('source', 'Document')} (p. {src.get('page', 'N/A')})"
-                for idx, src in enumerate(sources, 1)
-            ]
-            selected_idx = st.selectbox(
-                "Inspect retrieved chunk",
-                options,
-                format_func=lambda i: option_labels[i],
-                key=f"{key_prefix}_select",
-            )
-        else:
-            selected_idx = 0
-
-        selected = sources[selected_idx]
-        highlight_html = selected.get("highlighted_excerpt")
-        if not highlight_html:
-            highlight_html = html.escape(
-                selected.get("chunk_excerpt") or selected.get("content") or ""
-            )
-
-        st.markdown(
-            f"""
-            <div class="rag-highlight">
-                {highlight_html}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        meta_bits = []
-        if selected.get("rank"):
-            meta_bits.append(f"Rank: {selected['rank']}")
-        if selected.get("score") is not None:
-            meta_bits.append(f"Relevance score: {selected['score']:.3f}")
-        if selected.get("page"):
-            meta_bits.append(f"Page: {selected['page']}")
-        if meta_bits:
-            st.caption(" • ".join(meta_bits))
-
-        with st.expander("View full chunk context", expanded=False):
-            chunk_text = selected.get("chunk_full") or selected.get("content") or ""
-            st.markdown(f"```text\n{chunk_text}\n```")
+            if highlight:
+                st.markdown(highlight, unsafe_allow_html=True)
+            st.code(chunk_text, language="text")
+            score = source.get("score")
+            meta_bits = []
+            if score is not None:
+                meta_bits.append(f"Relevance score {score:.3f}")
+            file_path = source.get("source_path")
+            if file_path:
+                meta_bits.append(file_path)
+            if meta_bits:
+                st.caption(" • ".join(meta_bits))
 
 
 # Display chat messages
@@ -404,35 +383,6 @@ prompts = {
     "Vision Transformer": "What is the Vision Transformer and how does it apply transformers to images?",
     "Feed-Forward": "Explain the role of feed-forward networks in transformers"
 }
-
-
-def render_source_details(
-    sources: List[Dict[str, Any]],
-    key_prefix: str,
-    default_expanded: bool = False,
-) -> None:
-    """Show retrieved chunks with full text so users can see raw context."""
-    if not sources:
-        return
-
-    for idx, source in enumerate(sources, 1):
-        title = f"Source {idx}: `{source.get('source', 'Document')}` (page {source.get('page', 'N/A')})"
-        chunk_text = source.get("chunk_full") or source.get("content") or ""
-        highlight = source.get("highlighted_excerpt") or source.get("chunk_excerpt") or ""
-
-        with st.expander(title, expanded=default_expanded and idx == 1):
-            if highlight:
-                st.markdown(highlight, unsafe_allow_html=True)
-            st.code(chunk_text, language="text")
-            score = source.get("score")
-            meta_bits = []
-            if score is not None:
-                meta_bits.append(f"Relevance score {score:.3f}")
-            file_path = source.get("source_path")
-            if file_path:
-                meta_bits.append(file_path)
-            if meta_bits:
-                st.caption(" • ".join(meta_bits))
 
 # Filter out used prompts
 available_prompts = {k: v for k, v in prompts.items() if k not in st.session_state.used_prompts}
