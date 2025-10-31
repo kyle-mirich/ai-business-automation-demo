@@ -255,93 +255,41 @@ def render_source_details(
             page_num = source.get('page', 1)
 
             # Build metadata string
-            meta_bits = []
-            if score is not None:
-                meta_bits.append(f"Relevance: {score:.3f}")
-            meta_str = " • ".join(meta_bits) if meta_bits else ""
-
-            # Build GitHub link button HTML
-            github_link_html = ""
-            if source_url:
-                # Escape the URL to prevent breaking HTML attributes
-                escaped_url = html.escape(source_url, quote=True)
-                escaped_doc_name = html.escape(doc_name)
-                github_link_html = f"""
-                <div style="margin: 10px 0;">
-                    <a href="{escaped_url}" target="_blank" rel="noopener noreferrer" style="
-                        display: inline-block;
-                        padding: 8px 16px;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white;
-                        text-decoration: none;
-                        border-radius: 6px;
-                        font-weight: 500;
-                        transition: all 0.3s ease;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    ">
-                        📄 View {escaped_doc_name} on GitHub (page {page_num})
-                    </a>
-                    <p style="font-size: 0.85em; color: #64748b; margin-top: 5px;">
-                        💡 Opens in GitHub&apos;s PDF viewer - manually navigate to page {page_num}
-                    </p>
-                </div>
-                """
-
-            # Build highlighted excerpt HTML (highlight already contains safe HTML with <mark> tags)
-            excerpt_html = ""
-            if highlight:
-                # The highlight variable already contains HTML-escaped content with <mark> tags
-                # So we can use it directly
-                excerpt_html = f"""
-                <div style="margin: 10px 0;">
-                    <strong>Relevant excerpt:</strong>
-                    <div style="margin-top: 5px; background: #fefce8; padding: 10px; border-radius: 6px; border-left: 3px solid #fbbf24;">{highlight}</div>
-                </div>
-                """
+            meta_str = f"Relevance: {score:.3f}" if score is not None else ""
 
             # Create collapsible HTML with details/summary (all collapsed by default)
-            open_attr = ''
-            html_content = f"""
-            <details {open_attr} style="
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                padding: 12px;
-                margin: 12px 0;
-                background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            ">
-                <summary style="
-                    cursor: pointer;
-                    font-weight: 600;
-                    color: #1e40af;
-                    font-size: 1.05em;
-                    padding: 8px;
-                    user-select: none;
-                    list-style: none;
-                ">
-                    📄 Source {idx}: {html.escape(doc_name)} (page {page})
-                    {f'<span style="color: #64748b; font-weight: normal; font-size: 0.9em;"> • {meta_str}</span>' if meta_str else ''}
-                </summary>
-                <div style="margin-top: 12px; padding: 8px;">
-                    {github_link_html}
-                    {excerpt_html}
-                    <div style="margin: 10px 0;">
-                        <strong>Full context:</strong>
-                        <pre style="
-                            background: #f1f5f9;
-                            padding: 12px;
-                            border-radius: 6px;
-                            overflow-x: auto;
-                            font-size: 0.9em;
-                            line-height: 1.5;
-                            margin-top: 8px;
-                            border-left: 3px solid #3b82f6;
-                        ">{html.escape(chunk_text)}</pre>
-                    </div>
-                    {f'<p style="font-size: 0.85em; color: #64748b; margin-top: 8px;">{html.escape(file_path)}</p>' if file_path else ''}
-                </div>
-            </details>
-            """
+            # Note: We need to be very careful with escaping to prevent HTML injection
+            escaped_doc_name = html.escape(doc_name)
+            escaped_page = html.escape(str(page))
+            escaped_chunk = html.escape(chunk_text)
+            escaped_file_path = html.escape(file_path) if file_path else ""
+
+            # Build the summary line
+            summary_line = f'📄 Source {idx}: {escaped_doc_name} (page {escaped_page})'
+            if meta_str:
+                summary_line += f' <span style="color: #64748b; font-weight: normal; font-size: 0.9em;"> • {meta_str}</span>'
+
+            html_content = f'<details style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 12px 0; background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">'
+            html_content += f'<summary style="cursor: pointer; font-weight: 600; color: #1e40af; font-size: 1.05em; padding: 8px; user-select: none; list-style: none;">{summary_line}</summary>'
+            html_content += '<div style="margin-top: 12px; padding: 8px;">'
+
+            # GitHub link
+            if source_url:
+                html_content += f'<div style="margin: 10px 0;"><a href="{html.escape(source_url, quote=True)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 6px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 View {escaped_doc_name} on GitHub (page {page_num})</a>'
+                html_content += f'<p style="font-size: 0.85em; color: #64748b; margin-top: 5px;">💡 Opens in GitHub\'s PDF viewer - manually navigate to page {page_num}</p></div>'
+
+            # Highlighted excerpt (already contains safe HTML)
+            if highlight:
+                html_content += f'<div style="margin: 10px 0;"><strong>Relevant excerpt:</strong><div style="margin-top: 5px; background: #fefce8; padding: 10px; border-radius: 6px; border-left: 3px solid #fbbf24;">{highlight}</div></div>'
+
+            # Full context
+            html_content += f'<div style="margin: 10px 0;"><strong>Full context:</strong><pre style="background: #f1f5f9; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.9em; line-height: 1.5; margin-top: 8px; border-left: 3px solid #3b82f6;">{escaped_chunk}</pre></div>'
+
+            # File path
+            if escaped_file_path:
+                html_content += f'<p style="font-size: 0.85em; color: #64748b; margin-top: 8px;">{escaped_file_path}</p>'
+
+            html_content += '</div></details>'
 
             st.markdown(html_content, unsafe_allow_html=True)
 
