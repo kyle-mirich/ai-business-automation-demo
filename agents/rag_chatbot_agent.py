@@ -66,11 +66,18 @@ class RAGChatbotAgent:
         # Initialize embeddings with HuggingFace (BAAI/bge-small-en-v1.5)
         # This model is lightweight and efficient, perfect for 8GB VRAM
         # No API calls or quotas, fully local
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5",
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True}
-        )
+        try:
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True}
+            )
+        except Exception as e:
+            # If HuggingFace embeddings fail, provide detailed error
+            raise ImportError(
+                f"Failed to initialize HuggingFaceEmbeddings: {str(e)}\n"
+                "Please ensure sentence-transformers is installed: pip install sentence-transformers"
+            )
 
         # Vector store
         self.vectorstore = None
