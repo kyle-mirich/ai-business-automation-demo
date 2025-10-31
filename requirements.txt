@@ -31,6 +31,6 @@ chromadb>=0.4.22
 langchain-chroma>=0.1.0
 duckduckgo-search>=4.1.0
 pypdf>=4.0.0
-tiktoken>=0.8.0
+tiktoken==0.8.0
 arxiv>=2.1.0
 sentence-transformers>=2.2.0
