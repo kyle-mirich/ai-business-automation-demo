@@ -242,41 +242,44 @@ def render_source_details(
     if not sources:
         return
 
-    for idx, source in enumerate(sources, 1):
-        doc_name = source.get('source', 'Document')
-        page = source.get('page', 'N/A')
-        source_url = source.get('source_url')
+    # Outer expander containing all sources
+    with st.expander(f"📚 **View {len(sources)} Source Document{'s' if len(sources) != 1 else ''}**", expanded=default_expanded):
+        for idx, source in enumerate(sources, 1):
+            doc_name = source.get('source', 'Document')
+            page = source.get('page', 'N/A')
+            source_url = source.get('source_url')
 
-        title = f"Source {idx}: `{doc_name}` (page {page})"
-        chunk_text = source.get("chunk_full") or source.get("content") or ""
-        highlight = source.get("highlighted_excerpt") or source.get("chunk_excerpt") or ""
+            title = f"Source {idx}: `{doc_name}` (page {page})"
+            chunk_text = source.get("chunk_full") or source.get("content") or ""
+            highlight = source.get("highlighted_excerpt") or source.get("chunk_excerpt") or ""
 
-        with st.expander(title, expanded=default_expanded and idx == 1):
-            # Show clickable link to navigate to GitHub PDF
-            if source_url:
-                page_num = source.get('page', 1)
+            # Inner expander for each individual source
+            with st.expander(title, expanded=(idx == 1)):
+                # Show clickable link to navigate to GitHub PDF
+                if source_url:
+                    page_num = source.get('page', 1)
 
-                # Use st.link_button to open GitHub PDF in new tab
-                st.link_button(
-                    f"📄 View {doc_name} on GitHub (page {page_num})",
-                    source_url,
-                    type="secondary"
-                )
-                st.caption(f"💡 Opens in GitHub's PDF viewer - manually navigate to page {page_num}")
-                st.markdown("---")
+                    # Use st.link_button to open GitHub PDF in new tab
+                    st.link_button(
+                        f"📄 View {doc_name} on GitHub (page {page_num})",
+                        source_url,
+                        type="secondary"
+                    )
+                    st.caption(f"💡 Opens in GitHub's PDF viewer - manually navigate to page {page_num}")
+                    st.markdown("---")
 
-            if highlight:
-                st.markdown(highlight, unsafe_allow_html=True)
-            st.code(chunk_text, language="text")
-            score = source.get("score")
-            meta_bits = []
-            if score is not None:
-                meta_bits.append(f"Relevance score {score:.3f}")
-            file_path = source.get("source_path")
-            if file_path:
-                meta_bits.append(file_path)
-            if meta_bits:
-                st.caption(" • ".join(meta_bits))
+                if highlight:
+                    st.markdown(highlight, unsafe_allow_html=True)
+                st.code(chunk_text, language="text")
+                score = source.get("score")
+                meta_bits = []
+                if score is not None:
+                    meta_bits.append(f"Relevance score {score:.3f}")
+                file_path = source.get("source_path")
+                if file_path:
+                    meta_bits.append(file_path)
+                if meta_bits:
+                    st.caption(" • ".join(meta_bits))
 
 
 # Show suggested prompts only if there are no messages yet
