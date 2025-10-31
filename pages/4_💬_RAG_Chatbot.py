@@ -236,14 +236,13 @@ The chatbot retrieves answers from research papers and provides citations.
 def render_source_details(
     sources: List[Dict[str, Any]],
     key_prefix: str,
-    default_expanded: bool = False,
 ) -> None:
     """Show retrieved chunks with full text so users can see raw context."""
     if not sources:
         return
 
-    # Outer expander containing all sources
-    with st.expander(f"📚 **View {len(sources)} Source Document{'s' if len(sources) != 1 else ''}**", expanded=default_expanded):
+    # Outer expander containing all sources (always collapsed by default)
+    with st.expander(f"📚 **View {len(sources)} Source Document{'s' if len(sources) != 1 else ''}**", expanded=False):
         for idx, source in enumerate(sources, 1):
             doc_name = source.get('source', 'Document')
             page = source.get('page', 'N/A')
@@ -381,7 +380,7 @@ for idx, message in enumerate(st.session_state.chat_messages):
 
         # Show sources if available
         if message.get("sources"):
-            render_source_details(message["sources"], key_prefix=f"history-{idx}", default_expanded=False)
+            render_source_details(message["sources"], key_prefix=f"history-{idx}")
 
         # Show cost if available
         if message.get("cost"):
@@ -457,7 +456,7 @@ if user_input:
         if sources:
             with sources_placeholder.container():
                 key_prefix = f"live-{len(st.session_state.chat_messages)}"
-                render_source_details(sources, key_prefix=key_prefix, default_expanded=True)
+                render_source_details(sources, key_prefix=key_prefix)
 
         # Display cost
         cost_placeholder.caption(
