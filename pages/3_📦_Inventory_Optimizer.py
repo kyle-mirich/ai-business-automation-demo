@@ -75,9 +75,13 @@ state_defaults = {
     "inventory_analysis": None,
     "inventory_forecast": None,
     "inventory_recommendations": None,
+    "inventory_brief": None,
+    "inventory_usage_snapshot": None,
     "inventory_steps": [],
     "inventory_error": None,
     "inventory_last_run": None,
+    "inventory_chat_history": [],
+    "inventory_qa_error": None,
 }
 for key, value in state_defaults.items():
     if key not in st.session_state:
@@ -113,6 +117,10 @@ if run_analysis:
     progress_box = st.empty()
     st.session_state.inventory_steps = []
     st.session_state.inventory_error = None
+    st.session_state.inventory_brief = None
+    st.session_state.inventory_chat_history = []
+    st.session_state.inventory_usage_snapshot = None
+    st.session_state.inventory_qa_error = None
 
     try:
         progress_box.info("Initializing inventory agent...")
@@ -145,12 +153,28 @@ if run_analysis:
         progress_box.info("Generating Gemini recommendations...")
         recommendations = agent.generate_recommendations()
         st.session_state.inventory_recommendations = recommendations
+        st.session_state.inventory_usage_snapshot = agent.usage.to_dict()
         log_step(
             "Generate reorder plan",
             "success",
             {
                 "recommendations": len(recommendations.get("recommendations", [])),
                 "estimated_cost": recommendations["token_usage"]["estimated_cost"],
+            },
+        )
+
+        progress_box.info("Crafting executive briefing...")
+        briefing = agent.generate_briefing(recommendations)
+        st.session_state.inventory_brief = briefing
+        st.session_state.inventory_usage_snapshot = agent.usage.to_dict()
+        structured_brief = briefing.get("structured_brief", {}) if isinstance(briefing, dict) else {}
+        summary_preview = (structured_brief.get("executive_summary") or "").replace("\n", " ")[:140]
+        log_step(
+            "Synthesize executive brief",
+            "success",
+            {
+                "priority_actions": len(structured_brief.get("priority_actions", [])),
+                "summary_preview": summary_preview,
             },
         )
 
@@ -223,15 +247,84 @@ metrics_col2.metric("Average Lead Time", f"{summary['average_lead_time']:.1f} da
 metrics_col3.metric("Low Stock SKUs", analysis_summary["low_stock_count"])
 metrics_col4.metric("Fast Movers", analysis_summary["fast_mover_count"])
 
+usage_snapshot = st.session_state.get("inventory_usage_snapshot") or agent.usage.to_dict()
 st.caption(
     "💰 **Transparent cost tracking:** "
-    f"Gemini API cost for this run: **${recommendations['token_usage']['estimated_cost']:.6f}** | "
-    f"Input: {recommendations['token_usage']['prompt_tokens']:,} tokens | "
-    f"Output: {recommendations['token_usage']['completion_tokens']:,} tokens | "
-    f"Total: {recommendations['token_usage']['total_tokens']:,} tokens"
+    f"Gemini API cost for this run: **${usage_snapshot['estimated_cost']:.6f}** | "
+    f"Input: {usage_snapshot['prompt_tokens']:,} tokens | "
+    f"Output: {usage_snapshot['completion_tokens']:,} tokens | "
+    f"Total: {usage_snapshot['total_tokens']:,} tokens"
 )
 
-st.divider()
+briefing = st.session_state.get("inventory_brief")
+if briefing and isinstance(briefing, dict):
+    structured = briefing.get("structured_brief", {}) or {}
+    st.subheader("🧠 AI Executive Brief")
+
+    summary_md = structured.get("executive_summary")
+    if summary_md:
+        st.markdown(summary_md)
+    else:
+        st.info("Executive summary unavailable from the latest Gemini call.")
+
+    col_brief_left, col_brief_right = st.columns([2, 1])
+    with col_brief_left:
+        st.markdown("**Priority Actions**")
+        priority_actions = structured.get("priority_actions")
+        if isinstance(priority_actions, list) and priority_actions:
+            for action in priority_actions:
+                sku = action.get("sku", "N/A")
+                headline = action.get("headline", "Action")
+                action_text = action.get("action", "")
+                impact = action.get("impact", "")
+                confidence = action.get("confidence", "")
+                st.markdown(
+                    f"- **{headline}** (`{sku}`)\n"
+                    f"  - {action_text}\n"
+                    f"  - Impact: {impact}\n"
+                    f"  - Confidence: {confidence}"
+                )
+        elif priority_actions:
+            st.markdown(str(priority_actions))
+        else:
+            st.info("Gemini did not surface any priority moves.")
+
+    with col_brief_right:
+        st.markdown("**Finance & Risk Callouts**")
+        finance = structured.get("finance_callouts")
+        if finance:
+            st.markdown(finance)
+        else:
+            st.markdown("_No finance notes generated._")
+
+        risk_watch = structured.get("risk_watchlist")
+        if isinstance(risk_watch, list) and risk_watch:
+            st.markdown("**Risk Watchlist**")
+            for risk in risk_watch:
+                sku = risk.get("sku", "N/A")
+                risk_label = risk.get("risk", "Risk")
+                trigger = risk.get("trigger", "No trigger provided")
+                st.markdown(f"- `{sku}` — **{risk_label}** (trigger: {trigger})")
+        elif risk_watch:
+            st.markdown("**Risk Watchlist**")
+            st.markdown(str(risk_watch))
+        else:
+            st.markdown("**Risk Watchlist**")
+            st.markdown("_No critical risks flagged._")
+
+    broadcast = structured.get("team_broadcast")
+    if isinstance(broadcast, dict):
+        st.markdown("**Slack-ready Broadcast**")
+        message = broadcast.get("message", "").strip()
+        if message:
+            channel = broadcast.get("channel", "Slack")
+            st.caption(f"Channel: {channel}")
+            st.chat_message("assistant").write(message)
+        else:
+            st.info("No broadcast generated.")
+    st.divider()
+else:
+    st.divider()
 
 # ---------------------------------------------------------------------------
 # Behind the scenes
@@ -244,11 +337,19 @@ with st.expander("🔍 Behind the Scenes (prompts, steps, raw output)", expanded
             st.json(step["details"])
         st.markdown("---")
 
-    st.markdown("**Prompt (truncated preview)**")
+    st.markdown("**Reorder Plan Prompt (preview)**")
     st.code(recommendations["prompt_preview"][:2000], language="json")
 
-    st.markdown("**Gemini Raw Response**")
+    st.markdown("**Reorder Plan Raw Response**")
     st.code(recommendations["raw_response"], language="json")
+
+    briefing = st.session_state.get("inventory_brief")
+    if briefing and isinstance(briefing, dict):
+        st.markdown("**Executive Brief Prompt (preview)**")
+        st.code(str(briefing.get("prompt_preview", ""))[:2000], language="json")
+
+        st.markdown("**Executive Brief Raw Response**")
+        st.code(str(briefing.get("raw_response", "")), language="json")
 
 st.divider()
 
@@ -445,6 +546,45 @@ with col_chart2:
             )
             fig_priority.update_layout(height=320, margin=dict(l=40, r=30, t=60, b=60))
             st.plotly_chart(fig_priority, use_container_width=True)
+
+st.divider()
+st.subheader("💬 Ask the Inventory Strategist")
+chat_container = st.container()
+qa_prompt = st.chat_input("Need a what-if scenario or follow-up? Ask the AI strategist.")
+
+if qa_prompt:
+    prior_history = list(st.session_state.inventory_chat_history)
+    st.session_state.inventory_chat_history.append({"role": "user", "content": qa_prompt})
+    with st.spinner("Synthesizing data-backed guidance..."):
+        try:
+            qa_response = agent.answer_question(
+                qa_prompt,
+                chat_history=prior_history,
+                recommendations=st.session_state.inventory_recommendations,
+            )
+        except Exception as exc:
+            st.session_state.inventory_qa_error = str(exc)
+        else:
+            st.session_state.inventory_chat_history.append(
+                {"role": "assistant", "content": qa_response.get("answer", "")}
+            )
+            st.session_state.inventory_usage_snapshot = agent.usage.to_dict()
+            st.session_state.inventory_qa_error = None
+
+with chat_container:
+    if st.session_state.inventory_chat_history:
+        for message in st.session_state.inventory_chat_history[-12:]:
+            role = message.get("role", "assistant")
+            content = message.get("content", "")
+            st.chat_message(role).write(content)
+    else:
+        st.caption("Kick off the conversation above to explore scenarios, trade-offs, or escalation plans.")
+
+if st.session_state.inventory_qa_error:
+    st.warning(
+        "The AI strategist could not complete the last request. "
+        "Check your API key and try again, or inspect the prompts in the Behind the Scenes section."
+    )
 
 st.caption(
     "Tip: Rerun the demo to see fresh Gemini responses — prompts and reasoning stay visible for transparency."

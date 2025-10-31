@@ -26,7 +26,7 @@ st.header("Interactive Demos")
 
 st.markdown("#### Agent Sandboxes")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.markdown("""
@@ -86,6 +86,25 @@ with col3:
 
     st.page_link("pages/3_📦_Inventory_Optimizer.py", label="🚀 Launch Inventory Optimizer", use_container_width=True)
 
+with col4:
+    st.markdown("""
+    ### 💬 RAG Chatbot
+
+    Chat with AI research papers using **RAG** (Retrieval Augmented Generation)
+    with streaming responses and source citations.
+
+    **Features:**
+    - 📚 ChromaDB vector store
+    - 💬 Real-time streaming responses
+    - 📖 Source citations with page numbers
+    - 🧠 Conversation memory
+
+    **Tech Stack:**
+    `LangChain` `ChromaDB` `Gemini` `RAG`
+    """)
+
+    st.page_link("pages/4_💬_RAG_Chatbot.py", label="🚀 Launch RAG Chatbot", use_container_width=True)
+
 st.divider()
 
 # Tech stack
@@ -95,6 +114,7 @@ st.markdown("""
 **Framework:** Streamlit |
 **AI/Agents:** LangChain, LangGraph |
 **LLM:** Google Generative AI (Gemini) |
+**Vector DB:** ChromaDB |
 **Forecasting:** Prophet |
 **Data:** Pandas, NumPy |
 **Viz:** Plotly

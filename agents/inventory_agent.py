@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from prophet import Prophet
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from utils.cost_calculator import calculate_gemini_cost, estimate_tokens
@@ -91,6 +91,8 @@ class InventoryAgent:
         self.forecast_result: Optional[pd.DataFrame] = None
         self.forecast_timelines: Dict[str, pd.DataFrame] = {}
         self.usage = TokenUsage(model=model)
+        self.last_recommendations: Optional[Dict[str, Any]] = None
+        self.last_briefing: Optional[Dict[str, Any]] = None
 
         self.llm = ChatGoogleGenerativeAI(
             model=model,
@@ -134,6 +136,81 @@ class InventoryAgent:
                             '  "overall_notes": string\n'
                             "}}\n"
                             "Only include SKUs that truly need action. Cap recommendations to 12 items."
+                        ),
+                    ),
+                ]
+            )
+            | self.llm
+            | StrOutputParser()
+        )
+
+        self._briefing_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        (
+                            "You are an AI chief operations strategist. Craft an executive-ready inventory briefing "
+                            "grounded in the supplied facts. Always respond with well-structured JSON that can be parsed. "
+                            "If a data point is missing, acknowledge it instead of inventing numbers."
+                        ),
+                    ),
+                    (
+                        "human",
+                        (
+                            "Context data (JSON):\n"
+                            "{context}\n\n"
+                            "Return JSON with exactly these keys:\n"
+                            "{{\n"
+                            '  "executive_summary": string (markdown with 2-3 bullet points),\n'
+                            '  "priority_actions": [\n'
+                            "    {{\n"
+                            '      "sku": string,\n'
+                            '      "headline": string,\n'
+                            '      "action": string,\n'
+                            '      "impact": string,\n'
+                            '      "confidence": "High" | "Medium" | "Low"\n'
+                            "    }}\n"
+                            "  ],\n"
+                            '  "finance_callouts": string (<=80 words),\n'
+                            '  "risk_watchlist": [\n'
+                            "    {{\n"
+                            '      "sku": string,\n'
+                            '      "risk": string,\n'
+                            '      "trigger": string\n'
+                            "    }}\n"
+                            "  ],\n"
+                            '  "team_broadcast": {{\n'
+                            '    "channel": "Slack",\n'
+                            '    "message": string (<=80 words)\n'
+                            "  }}\n"
+                            "}}\n"
+                            "Ensure each array includes at least one item. Base everything on the context provided."
+                        ),
+                    ),
+                ]
+            )
+            | self.llm
+            | StrOutputParser()
+        )
+
+        self._qa_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        (
+                            "You are an inventory strategist who answers questions strictly using the provided context. "
+                            "Flag any uncertainties, suggest next data to pull when needed, and keep responses actionable."
+                        ),
+                    ),
+                    (
+                        "human",
+                        (
+                            "Context (JSON):\n{context}\n\n"
+                            "Recent dialogue:\n{conversation}\n\n"
+                            "Question:\n{question}\n\n"
+                            "Respond in markdown with clear, concise guidance."
                         ),
                     ),
                 ]
@@ -390,12 +467,182 @@ class InventoryAgent:
         self.usage.prompt_tokens += estimate_tokens(prompt_preview)
         self.usage.completion_tokens += estimate_tokens(llm_response)
 
-        return {
+        result = {
             "recommendations": parsed.get("recommendations", []),
             "overall_notes": parsed.get("overall_notes", ""),
             "raw_response": llm_response,
             "token_usage": self.usage.to_dict(),
             "prompt_preview": prompt_preview,
+        }
+        self.last_recommendations = result
+        return result
+
+    def _build_context_snapshot(
+        self,
+        recommendations: Optional[Dict[str, Any]],
+        watchlist_items: int,
+    ) -> Dict[str, Any]:
+        """Assemble structured data for downstream GenAI prompts."""
+        rec_payload = recommendations or self.last_recommendations or {}
+        rec_list = rec_payload.get("recommendations", []) or []
+        top_recommendations = rec_list[: min(5, len(rec_list))]
+
+        focus_df = self._prepare_focus_dataframe(max(3, watchlist_items))
+        watchlist_records: List[Dict[str, Any]] = []
+        if not focus_df.empty:
+            watchlist_records = json.loads(focus_df.to_json(orient="records"))
+
+        df = self.df.copy()
+        df["inventory_value"] = df["current_stock"] * df["cost_per_unit"]
+        category_series = (
+            df.groupby("category")["inventory_value"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(3)
+        )
+        category_snapshot = [
+            {"category": str(cat), "inventory_value": round(float(value), 2)}
+            for cat, value in category_series.items()
+        ]
+
+        low_stock_sample: List[Dict[str, Any]] = []
+        if self.analysis_result:
+            low_stock_raw = self.analysis_result.get("low_stock", [])[:4]
+            if low_stock_raw:
+                low_stock_df = pd.DataFrame(low_stock_raw)
+                low_stock_sample = json.loads(
+                    low_stock_df.where(pd.notnull(low_stock_df), None).to_json(orient="records")
+                )
+
+        fast_movers_sample: List[Dict[str, Any]] = []
+        if self.analysis_result:
+            fast_movers_raw = self.analysis_result.get("fast_movers", [])[:3]
+            if fast_movers_raw:
+                fast_df = pd.DataFrame(fast_movers_raw)
+                fast_df = fast_df.replace([np.inf, -np.inf], np.nan)
+                fast_movers_sample = json.loads(
+                    fast_df.where(pd.notnull(fast_df), None).to_json(orient="records")
+                )
+
+        forecast_snapshot: List[Dict[str, Any]] = []
+        if self.forecast_result is not None:
+            forecast_slice = (
+                self.forecast_result.replace([np.inf, -np.inf], np.nan)
+                .sort_values("coverage_days", na_position="last")
+                .head(5)
+            )
+            if not forecast_slice.empty:
+                forecast_subset = forecast_slice[
+                    [
+                        "sku",
+                        "product_name",
+                        "avg_daily_demand",
+                        "coverage_days",
+                        "forecast_units",
+                        "projected_gap",
+                    ]
+                ]
+                forecast_snapshot = json.loads(
+                    forecast_subset.where(pd.notnull(forecast_subset), None).to_json(orient="records")
+                )
+
+        summary_snapshot = self.analysis_result["summary"] if self.analysis_result else {}
+
+        return {
+            "summary": summary_snapshot,
+            "overall_notes": rec_payload.get("overall_notes", ""),
+            "top_recommendations": top_recommendations,
+            "watchlist": watchlist_records,
+            "top_categories_by_value": category_snapshot,
+            "low_stock_sample": low_stock_sample,
+            "fast_movers_sample": fast_movers_sample,
+            "forecast_snapshot": forecast_snapshot,
+        }
+
+    def generate_briefing(
+        self,
+        recommendations: Optional[Dict[str, Any]] = None,
+        watchlist_items: int = 6,
+    ) -> Dict[str, Any]:
+        """Produce an executive-ready GenAI briefing that summarizes the run."""
+        if self.df is None or self.analysis_result is None or self.forecast_result is None:
+            raise RuntimeError(
+                "Missing inputs. Call load_inventory(), analyze_inventory(), and forecast_demand() first."
+            )
+
+        context_payload = self._build_context_snapshot(recommendations, watchlist_items)
+        prompt_context = json.dumps(context_payload)
+
+        llm_response = self._briefing_chain.invoke({"context": prompt_context})
+
+        fallback = {
+            "executive_summary": "Unable to generate briefing. Review underlying data manually.",
+            "priority_actions": [],
+            "finance_callouts": "N/A",
+            "risk_watchlist": [],
+            "team_broadcast": {"channel": "Slack", "message": "No update available."},
+        }
+        parsed = self._extract_json_object(llm_response) or fallback
+
+        self.usage.prompt_tokens += estimate_tokens(prompt_context)
+        self.usage.completion_tokens += estimate_tokens(llm_response)
+
+        result = {
+            "structured_brief": parsed,
+            "raw_response": llm_response,
+            "prompt_preview": prompt_context,
+            "token_usage": self.usage.to_dict(),
+        }
+        self.last_briefing = result
+        return result
+
+    def answer_question(
+        self,
+        question: str,
+        chat_history: Optional[List[Dict[str, str]]] = None,
+        recommendations: Optional[Dict[str, Any]] = None,
+        watchlist_items: int = 6,
+    ) -> Dict[str, Any]:
+        """Provide conversational Q&A grounded in the latest inventory context."""
+        if self.df is None or self.analysis_result is None or self.forecast_result is None:
+            raise RuntimeError(
+                "Missing inputs. Call load_inventory(), analyze_inventory(), and forecast_demand() first."
+            )
+        if not question.strip():
+            raise ValueError("Question must be a non-empty string.")
+
+        context_payload = self._build_context_snapshot(recommendations, watchlist_items)
+        context_json = json.dumps(context_payload)
+        conversation_text = ""
+        if chat_history:
+            recent_turns = chat_history[-4:]
+            conversation_text = "\n".join(
+                f"{turn.get('role', 'user').capitalize()}: {turn.get('content', '')}"
+                for turn in recent_turns
+                if turn.get("content")
+            )
+
+        prompt_preview = (
+            f"Context: {context_json}\n"
+            f"Conversation: {conversation_text or 'None'}\n"
+            f"Question: {question}"
+        )
+        llm_response = self._qa_chain.invoke(
+            {
+                "context": context_json,
+                "conversation": conversation_text or "None",
+                "question": question,
+            }
+        )
+
+        self.usage.prompt_tokens += estimate_tokens(prompt_preview)
+        self.usage.completion_tokens += estimate_tokens(llm_response)
+
+        return {
+            "answer": llm_response,
+            "raw_response": llm_response,
+            "prompt_preview": prompt_preview,
+            "token_usage": self.usage.to_dict(),
         }
 
     def _prepare_focus_dataframe(self, max_items: int) -> pd.DataFrame:
@@ -450,19 +697,27 @@ class InventoryAgent:
 
     def _parse_recommendations(self, response: str) -> Dict[str, Any]:
         """Extract JSON payload from Gemini response."""
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            json_start = response.find("{")
-            json_end = response.rfind("}")
-            if json_start != -1 and json_end != -1:
-                snippet = response[json_start : json_end + 1]
-                try:
-                    return json.loads(snippet)
-                except json.JSONDecodeError:
-                    pass
+        payload = self._extract_json_object(response)
+        if payload is not None:
+            return payload
 
         return {
             "recommendations": [],
             "overall_notes": "Unable to parse Gemini response. Please review raw output.",
         }
+
+    @staticmethod
+    def _extract_json_object(raw: str) -> Optional[Dict[str, Any]]:
+        """Best-effort extraction of JSON from an LLM response string."""
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            json_start = raw.find("{")
+            json_end = raw.rfind("}")
+            if json_start != -1 and json_end != -1:
+                snippet = raw[json_start : json_end + 1]
+                try:
+                    return json.loads(snippet)
+                except json.JSONDecodeError:
+                    return None
+        return None

@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(python test_setup.py:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(pip install:*)",
+      "Bash(python setup_rag.py:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(uv pip install:*)",
+      "Bash(uv pip uninstall:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
