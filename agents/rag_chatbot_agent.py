@@ -63,32 +63,15 @@ class RAGChatbotAgent:
             convert_system_message_to_human=True
         )
 
-        # Initialize embeddings
-        # Note: Must use the same embedding model that was used to build the vector store
-        # The current vector store uses BAAI/bge-small-en-v1.5 (HuggingFace)
-
-        # Try HuggingFace first (local, free, but requires sentence-transformers)
-        try:
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="BAAI/bge-small-en-v1.5",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True}
-            )
-            self.embedding_type = "huggingface"
-        except Exception as e:
-            # If HuggingFace fails, we CANNOT use Google embeddings because the vector
-            # store was built with HuggingFace embeddings. They are incompatible.
-            # Solution: Rebuild vector store locally with Google embeddings and commit it.
-            raise ImportError(
-                f"❌ Cannot load HuggingFace embeddings: {str(e)}\n\n"
-                "The vector store was built with HuggingFace 'BAAI/bge-small-en-v1.5' embeddings.\n"
-                "To fix this on Streamlit Cloud:\n"
-                "1. Run locally: python utils/rebuild_vector_store.py\n"
-                "2. The script will use Google embeddings (no sentence-transformers needed)\n"
-                "3. Commit the new vector store: git add data/papers/rag_chroma/\n"
-                "4. Push to deploy: git push\n\n"
-                "Note: sentence-transformers requires PyTorch which is too large for Streamlit Cloud."
-            )
+        # Initialize embeddings with HuggingFace (BAAI/bge-small-en-v1.5)
+        # This model is lightweight and efficient
+        # No API calls or quotas, fully local
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="BAAI/bge-small-en-v1.5",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True}
+        )
+        self.embedding_type = "huggingface"
 
         # Vector store
         self.vectorstore = None

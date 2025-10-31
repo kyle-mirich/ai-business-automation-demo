@@ -32,3 +32,12 @@ duckduckgo-search
 pypdf
 tiktoken
 arxiv
+
+# Embedding model dependencies
+sentence-transformers
+torch
+torchvision
+transformers
+tokenizers
+huggingface-hub
+safetensors

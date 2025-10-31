@@ -19,7 +19,9 @@
       "Bash(git commit:*)",
       "Bash(cat:*)",
       "Bash(git push)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

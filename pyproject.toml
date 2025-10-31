@@ -37,10 +37,6 @@ dependencies = [
 
     # RAG Chatbot Dependencies
     "chromadb>=0.4.22",
-    "sentence-transformers>=2.2.0",
-    "torch>=2.0.0",
-    "transformers>=4.30.0",
-    "huggingface-hub>=0.16.0",
     "duckduckgo-search>=4.1.0",
     "pypdf>=4.0.0",
     "tiktoken==0.8.0",
