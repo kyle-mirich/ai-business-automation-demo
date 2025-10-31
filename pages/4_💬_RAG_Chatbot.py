@@ -160,7 +160,7 @@ if not st.session_state.rag_loaded:
             st.session_state.rag_loaded = True
 
             # Debug: Show where ChromaDB is loading from
-            chroma_path = documents_path / "chroma_db"
+            chroma_path = Path(st.session_state.rag_agent.persist_directory)
             st.toast(f"✅ Loaded ChromaDB from: {chroma_path}", icon="📦")
         except Exception as e:
             st.error(f"Failed to load papers: {str(e)}")
@@ -210,7 +210,7 @@ with st.sidebar:
             )
 
         # Show ChromaDB path for debugging
-        chroma_path = documents_path / "chroma_db"
+        chroma_path = Path(st.session_state.rag_agent.persist_directory)
         with st.expander("🔧 Debug Info"):
             st.caption(f"**ChromaDB Path:**")
             st.code(str(chroma_path))

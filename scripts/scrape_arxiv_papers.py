@@ -210,7 +210,7 @@ def build_vector_store(
     )
 
     # Create vector store
-    db_path = papers_dir / "chroma_db"
+    db_path = papers_dir / "rag_chroma"
     logger.info(f"Creating ChromaDB at {db_path}...")
     logger.info(f"Embedding {len(splits)} chunks (this may take a few minutes on CPU)...")
 

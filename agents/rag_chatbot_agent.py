@@ -14,6 +14,7 @@ import re
 import shutil
 from typing import List, Dict, Any, Optional, Generator, Tuple
 from pathlib import Path
+from urllib.parse import quote
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -77,6 +78,11 @@ class RAGChatbotAgent:
         self.last_sources = []
         self.last_load_result: Optional[Dict[str, Any]] = None
 
+    @property
+    def persist_directory(self) -> Path:
+        """Directory where the Chroma vector store is persisted."""
+        return self.documents_path / "rag_chroma"
+
     def load_documents(self, force_reload: bool = False) -> Dict[str, Any]:
         """
         Load PDFs and create/load vector store
@@ -89,7 +95,7 @@ class RAGChatbotAgent:
         """
         try:
             # Setup persist directory (inside papers folder)
-            persist_directory = self.documents_path / "chroma_db"
+            persist_directory = self.documents_path / "rag_chroma"
             if force_reload and persist_directory.exists():
                 shutil.rmtree(persist_directory)
             persist_directory.mkdir(parents=True, exist_ok=True)
@@ -233,7 +239,7 @@ class RAGChatbotAgent:
         Yields:
             Dicts with type and content
         """
-        if not self.retriever:
+        if self.retriever is None:
             yield {
                 "type": "error",
                 "content": "Vector database not loaded. Please load documents first."
@@ -405,16 +411,26 @@ Please provide a helpful answer based on the research papers. Always cite your s
             relative_str = str(relative_href)
 
         if relative_str:
-            page_fragment = ""
+            page_int: Optional[int] = None
             try:
-                page_int = int(page)
-                page_fragment = f"#page={page_int}"
+                page_int = max(1, int(page))
             except Exception:
-                page_fragment = ""
+                page_int = None
 
-            if not relative_str.startswith(("http://", "https://", "/")):
-                relative_str = f"data/papers/{relative_str}"
-            source_url = f"./{relative_str}{page_fragment}"
+            relative_str_text = str(relative_str)
+            if relative_str_text.startswith(("http://", "https://")):
+                source_url = (
+                    f"{relative_str_text}#page={page_int}"
+                    if page_int
+                    else relative_str_text
+                )
+            else:
+                paper_param = quote(relative_str_text, safe="/")
+                query_parts = [f"paper={paper_param}"]
+                if page_int:
+                    query_parts.append(f"page={page_int}")
+                query_string = "&".join(query_parts)
+                source_url = f"./5_Source_Viewer?{query_string}"
 
         return {
             "rank": rank,

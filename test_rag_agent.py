@@ -25,7 +25,7 @@ def test_rag_agent():
     # Setup paths
     documents_path = Path(__file__).parent / "data" / "papers"
     print(f"\nDocuments path: {documents_path}")
-    print(f"ChromaDB path: {documents_path / 'chroma_db'}")
+    print(f"ChromaDB path: {documents_path / 'rag_chroma'}")
 
     # Initialize agent
     print("\nLoading RAG agent...")

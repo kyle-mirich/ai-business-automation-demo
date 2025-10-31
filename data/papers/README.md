@@ -60,4 +60,4 @@ Once papers are downloaded, the RAG chatbot can answer questions like:
 
 ## Note
 
-The ChromaDB vector database will be automatically created in `data/chroma_db/` when you first run the RAG chatbot demo.
+The ChromaDB vector database will be automatically created in `data/rag_chroma/` when you first run the RAG chatbot demo.
