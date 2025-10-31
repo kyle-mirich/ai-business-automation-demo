@@ -92,7 +92,7 @@ class SupportAgentOrchestrator:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-2.5-flash",
         temperature: float = 0.3,
     ):
         if not api_key:

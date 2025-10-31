@@ -32,7 +32,7 @@ def test_rag_agent():
     agent = RAGChatbotAgent(
         api_key=api_key,
         documents_path=str(documents_path),
-        model="gemini-2.0-flash-exp"
+        model="gemini-2.5-flash"
     )
 
     # Load documents

@@ -44,7 +44,7 @@ class TokenUsage:
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-2.5-flash"
 
     @property
     def total_tokens(self) -> int:
@@ -77,7 +77,7 @@ class InventoryAgent:
         self,
         api_key: str,
         data_path: str,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-2.5-flash",
         temperature: float = 0.4,
     ):
         if not api_key:

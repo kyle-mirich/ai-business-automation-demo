@@ -32,7 +32,7 @@ class RAGChatbotAgent:
         self,
         api_key: str,
         documents_path: str,
-        model: str = "gemini-2.0-flash-exp",
+        model: str = "gemini-2.5-flash",
         collection_name: str = "ai_papers"
     ):
         """
@@ -425,12 +425,11 @@ Please provide a helpful answer based on the research papers. Always cite your s
                     else relative_str_text
                 )
             else:
-                paper_param = quote(relative_str_text, safe="/")
-                query_parts = [f"paper={paper_param}"]
-                if page_int:
-                    query_parts.append(f"page={page_int}")
-                query_string = "&".join(query_parts)
-                source_url = f"./Source_Viewer?{query_string}"
+                # Link directly to GitHub-hosted PDFs
+                github_base = "https://github.com/kyle-mirich/ai-business-automation-demo/blob/main/data/papers"
+                paper_param = quote(filename, safe="")
+                source_url = f"{github_base}/{paper_param}"
+                # Note: GitHub's PDF viewer doesn't support #page= fragment, but opens the PDF
 
         return {
             "rank": rank,

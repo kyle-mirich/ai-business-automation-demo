@@ -30,7 +30,7 @@ def load_rag_agent(api_key: str, documents_path: str) -> RAGChatbotAgent:
     agent = RAGChatbotAgent(
         api_key=api_key,
         documents_path=documents_path,
-        model="gemini-2.0-flash-exp"
+        model="gemini-2.5-flash"
     )
     # Load the vector store
     agent.last_load_result = agent.load_documents()
@@ -305,21 +305,17 @@ def render_source_details(
         highlight = source.get("highlighted_excerpt") or source.get("chunk_excerpt") or ""
 
         with st.expander(title, expanded=default_expanded and idx == 1):
-            # Show clickable link to navigate to source viewer
+            # Show clickable link to navigate to GitHub PDF
             if source_url:
-                paper_name = source.get('source', '')
                 page_num = source.get('page', 1)
 
-                from urllib.parse import quote
-                # Build the full navigation URL with current base
-                nav_url = f"Source_Viewer?paper={quote(paper_name)}&page={page_num}"
-
-                # Use st.link_button for proper navigation
+                # Use st.link_button to open GitHub PDF in new tab
                 st.link_button(
-                    f"📄 View {doc_name} (page {page_num})",
-                    nav_url,
+                    f"📄 View {doc_name} on GitHub (page {page_num})",
+                    source_url,
                     type="secondary"
                 )
+                st.caption(f"💡 Opens in GitHub's PDF viewer - manually navigate to page {page_num}")
                 st.markdown("---")
 
             if highlight:
@@ -459,7 +455,7 @@ if send_button and user_input:
         cost_info = calculate_gemini_cost(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            model="gemini-2.0-flash-exp"
+            model="gemini-2.5-flash"
         )
 
         # Update session totals

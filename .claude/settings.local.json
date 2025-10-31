@@ -14,7 +14,12 @@
       "Bash(.venv/Scripts/python.exe test_rag_agent.py)",
       "Bash(.venv/Scripts/python.exe -c \"from urllib.parse import quote; print(''./Source_Viewer?paper='' + quote(''Attention Is All You Need.pdf'') + ''&page=2'')\")",
       "Bash(.venv/Scripts/python.exe -m pip:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "Bash(git push)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []
