@@ -21,7 +21,9 @@
       "Bash(git push)",
       "Bash(git fetch:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(.venvScriptspython.exe test_chroma_load.py)",
+      "Bash(uv pip freeze:*)"
     ],
     "deny": [],
     "ask": []
