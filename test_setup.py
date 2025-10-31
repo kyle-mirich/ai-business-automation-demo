@@ -90,10 +90,22 @@ except ImportError:
 # Test 5: Test agent import
 print("\nTesting agent imports...")
 try:
-    from agents.financial_agent import FinancialAgent
-    print("[OK] FinancialAgent imported successfully")
+    from agents.financial_agent_langchain import FinancialAgentLangChain
+    print("[OK] FinancialAgentLangChain imported successfully")
 except ImportError as e:
-    print(f"[ERROR] FinancialAgent import failed: {e}")
+    print(f"[ERROR] FinancialAgentLangChain import failed: {e}")
+
+try:
+    from agents.support_agents import SupportAgentOrchestrator
+    print("[OK] SupportAgentOrchestrator imported successfully")
+except ImportError as e:
+    print(f"[ERROR] SupportAgentOrchestrator import failed: {e}")
+
+try:
+    from agents.inventory_agent import InventoryAgent
+    print("[OK] InventoryAgent imported successfully")
+except ImportError as e:
+    print(f"[ERROR] InventoryAgent import failed: {e}")
 
 # Test 6: Test utility imports
 try:
@@ -107,4 +119,4 @@ print("\n" + "="*50)
 print("Setup test complete!")
 print("="*50)
 print("\nTo run the app:")
-print("  streamlit run app.py")
+print("  streamlit run Home.py")

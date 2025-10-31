@@ -12,16 +12,14 @@ import streamlit as st
 import os
 from pathlib import Path
 import time
-from dotenv import load_dotenv
 import sys
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.financial_agent_langchain import FinancialAgentLangChain
-
-# Load environment variables
-load_dotenv()
+from utils.cost_calculator import estimate_tokens, calculate_gemini_cost, format_cost_breakdown
+from utils.secrets_manager import get_api_key, display_api_key_error
 
 # Page configuration
 st.set_page_config(
@@ -77,16 +75,10 @@ The AI will analyze the data, show you its work, and provide answers with clear 
 
 st.divider()
 
-# Check for API key
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key or api_key == "your_api_key_here":
-    st.error("⚠️ Google Gemini API key not configured!")
-    st.info("""
-    **To use this demo:**
-    1. Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-    2. Add it to the `.env` file: `GOOGLE_API_KEY=your_key_here`
-    3. Restart the Streamlit app
-    """)
+# Check for API key (supports both st.secrets and .env)
+api_key = get_api_key("GOOGLE_API_KEY")
+if not api_key:
+    display_api_key_error()
     st.stop()
 
 # Data file path
@@ -107,6 +99,12 @@ if 'auto_load_attempted' not in st.session_state:
     st.session_state.auto_load_attempted = False
 if 'data_load_error' not in st.session_state:
     st.session_state.data_load_error = None
+if 'total_cost' not in st.session_state:
+    st.session_state.total_cost = 0.0
+if 'query_count' not in st.session_state:
+    st.session_state.query_count = 0
+if 'report_cost' not in st.session_state:
+    st.session_state.report_cost = None
 
 
 def attempt_sales_data_load() -> None:
@@ -160,7 +158,20 @@ with st.sidebar:
             st.session_state.data_loaded = False
             st.session_state.agent = None
             st.session_state.chat_messages = []
+            st.session_state.total_cost = 0.0
+            st.session_state.query_count = 0
+            st.session_state.report_cost = None
             st.rerun()
+
+    st.divider()
+
+    # Cost tracking
+    st.header("💰 Session Costs")
+    st.metric("Queries", st.session_state.query_count)
+    st.metric("Total Cost", f"${st.session_state.total_cost:.6f}")
+    if st.session_state.query_count > 0:
+        avg_cost = st.session_state.total_cost / st.session_state.query_count
+        st.metric("Avg per Query", f"${avg_cost:.6f}")
 
     st.divider()
 
@@ -229,6 +240,15 @@ else:
                         {msg['content']}
                     </div>
                     """, unsafe_allow_html=True)
+
+                    # Show cost info if available
+                    if msg.get('cost_info'):
+                        cost = msg['cost_info']
+                        st.caption(
+                            f"💰 **Cost:** ${cost['total_cost']:.6f} "
+                            f"(Input: {cost['input_tokens']:,} tokens, "
+                            f"Output: {cost['output_tokens']:,} tokens)"
+                        )
 
                     # Show citation dataframe if available
                     if msg.get('citation_dataframe') is not None and not msg['citation_dataframe'].empty:
@@ -407,13 +427,27 @@ else:
                 result = st.session_state.agent.chat(user_input)
 
                 if result['success']:
-                    # Add AI response with tool usage, citation dataframe, and pandas code
+                    # Calculate estimated cost
+                    input_tokens = estimate_tokens(user_input)
+                    output_tokens = estimate_tokens(result['response'])
+                    cost_info = calculate_gemini_cost(
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        model="gemini-2.5-flash"
+                    )
+
+                    # Update session totals
+                    st.session_state.total_cost += cost_info['total_cost']
+                    st.session_state.query_count += 1
+
+                    # Add AI response with tool usage, citation dataframe, pandas code, and cost
                     st.session_state.chat_messages.append({
                         'role': 'assistant',
                         'content': result['response'],
                         'tools_used': result['intermediate_steps'],
                         'citation_dataframe': result.get('citation_dataframe'),
-                        'pandas_code': result.get('pandas_code')
+                        'pandas_code': result.get('pandas_code'),
+                        'cost_info': cost_info
                     })
                 else:
                     st.error(f"Error: {result['response']}")
@@ -455,9 +489,26 @@ else:
                     status_text.empty()
 
                     if result['success']:
-                        # Store report
+                        # Calculate cost for the report generation
+                        # Estimate input tokens from the prompt used for report generation
+                        report_prompt = "Analyze the sales data and generate a comprehensive financial report with insights, trends, and recommendations."
+                        input_tokens = estimate_tokens(report_prompt)
+                        output_tokens = estimate_tokens(result['response'])
+
+                        cost_info = calculate_gemini_cost(
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            model="gemini-2.5-flash"
+                        )
+
+                        # Update session totals
+                        st.session_state.total_cost += cost_info['total_cost']
+                        st.session_state.query_count += 1
+
+                        # Store report with cost info
                         st.session_state.report_generated = True
                         st.session_state.report_content = result
+                        st.session_state.report_cost = cost_info
                         st.rerun()
                     else:
                         st.error(f"Error generating report: {result['response']}")
@@ -469,6 +520,15 @@ else:
             # Show report content
             st.markdown("### 📄 Report")
             st.markdown(report['response'])
+
+            # Show cost info if available
+            if st.session_state.report_cost:
+                cost = st.session_state.report_cost
+                st.caption(
+                    f"💰 **Report Generation Cost:** ${cost['total_cost']:.6f} | "
+                    f"Input: {cost['input_tokens']:,} tokens | "
+                    f"Output: {cost['output_tokens']:,} tokens"
+                )
 
             # Show tool usage
             with st.expander("🔧 View AI's Work", expanded=False):

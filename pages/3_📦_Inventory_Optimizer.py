@@ -21,16 +21,15 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.inventory_agent import InventoryAgent
+from utils.secrets_manager import get_api_key, display_api_key_error
 
 # ---------------------------------------------------------------------------
 # Page setup
 # ---------------------------------------------------------------------------
-load_dotenv()
 
 st.set_page_config(
     page_title="Inventory Optimizer",
@@ -55,18 +54,10 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Environment checks
 # ---------------------------------------------------------------------------
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key or api_key == "your_api_key_here":
-    st.error("⚠️ Google Gemini API key not configured!")
-    st.info(
-        """
-        **Setup instructions**
-        1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-        2. Create an API key
-        3. Add it to `.env` as `GOOGLE_API_KEY=your_key`
-        4. Restart the Streamlit app
-        """
-    )
+# Check for API key (supports both st.secrets and .env)
+api_key = get_api_key("GOOGLE_API_KEY")
+if not api_key:
+    display_api_key_error()
     st.stop()
 
 data_path = Path(__file__).parent.parent / "data" / "inventory.csv"
@@ -233,9 +224,11 @@ metrics_col3.metric("Low Stock SKUs", analysis_summary["low_stock_count"])
 metrics_col4.metric("Fast Movers", analysis_summary["fast_mover_count"])
 
 st.caption(
-    "Transparent cost tracking: "
-    f"estimated Gemini cost for this run **${recommendations['token_usage']['estimated_cost']:.4f}** "
-    f"({recommendations['token_usage']['total_tokens']} tokens)"
+    "💰 **Transparent cost tracking:** "
+    f"Gemini API cost for this run: **${recommendations['token_usage']['estimated_cost']:.6f}** | "
+    f"Input: {recommendations['token_usage']['prompt_tokens']:,} tokens | "
+    f"Output: {recommendations['token_usage']['completion_tokens']:,} tokens | "
+    f"Total: {recommendations['token_usage']['total_tokens']:,} tokens"
 )
 
 st.divider()

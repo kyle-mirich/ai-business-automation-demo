@@ -48,11 +48,17 @@ class TokenUsage:
         return self.prompt_tokens + self.completion_tokens
 
     def to_dict(self, model: str) -> Dict[str, Any]:
+        # Use new accurate cost calculator
+        cost_info = calculate_gemini_cost(
+            input_tokens=self.prompt_tokens,
+            output_tokens=self.completion_tokens,
+            model=model
+        )
         return {
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
-            "estimated_cost": calculate_gemini_cost(self.total_tokens, model),
+            "estimated_cost": cost_info['total_cost'],
         }
 
 

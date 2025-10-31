@@ -11,7 +11,6 @@ from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
 
 import sys
 
@@ -20,8 +19,7 @@ ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from agents.support_agents import SupportAgentOrchestrator
-
-load_dotenv()
+from utils.secrets_manager import get_api_key, display_api_key_error
 
 st.set_page_config(
     page_title="Support Ticket Triage",
@@ -39,17 +37,10 @@ and drafts responses for real support tickets using Google Gemini.
 
 st.divider()
 
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key or api_key == "your_api_key_here":
-    st.error("⚠️ Google Gemini API key not configured!")
-    st.info(
-        """
-        To run this demo:
-        1. Create a key in [Google AI Studio](https://makersuite.google.com/app/apikey)
-        2. Add it to your `.env` as `GOOGLE_API_KEY=your_key`
-        3. Restart the Streamlit app
-        """
-    )
+# Check for API key (supports both st.secrets and .env)
+api_key = get_api_key("GOOGLE_API_KEY")
+if not api_key:
+    display_api_key_error()
     st.stop()
 
 # Load support tickets

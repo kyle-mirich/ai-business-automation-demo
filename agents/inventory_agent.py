@@ -52,7 +52,13 @@ class TokenUsage:
 
     @property
     def estimated_cost(self) -> float:
-        return calculate_gemini_cost(self.total_tokens, self.model)
+        # Use new accurate cost calculator
+        cost_info = calculate_gemini_cost(
+            input_tokens=self.prompt_tokens,
+            output_tokens=self.completion_tokens,
+            model=self.model
+        )
+        return cost_info['total_cost']
 
     def to_dict(self) -> Dict[str, Any]:
         return {
