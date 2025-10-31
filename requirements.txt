@@ -28,7 +28,6 @@ pytest>=7.4.0
 
 # RAG Chatbot Dependencies
 chromadb>=0.4.22
-langchain-chroma>=0.1.0
 duckduckgo-search>=4.1.0
 pypdf>=4.0.0
 tiktoken==0.8.0
