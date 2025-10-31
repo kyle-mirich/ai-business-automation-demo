@@ -43,3 +43,6 @@ Thumbs.db
 
 # Windows reserved device names (avoid trying to add these files)
 nul
+
+# ChromaDB
+data/papers/rag_chroma/
