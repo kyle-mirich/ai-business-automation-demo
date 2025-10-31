@@ -136,8 +136,6 @@ if "rag_query_count" not in st.session_state:
     st.session_state.rag_query_count = 0
 if "used_prompts" not in st.session_state:
     st.session_state.used_prompts = set()
-if "rag_auto_rebuilt" not in st.session_state:
-    st.session_state.rag_auto_rebuilt = False
 
 # Suggested questions for foundational papers
 SUGGESTED_QUESTIONS = [
@@ -155,41 +153,22 @@ SUGGESTED_QUESTIONS = [
 if not st.session_state.rag_loaded:
     with st.spinner("Loading foundational AI papers database..."):
         try:
-            # Load cached agent (vector store is cached)
+            # Load cached agent with pre-built vector store
             st.session_state.rag_agent = load_rag_agent(api_key, str(documents_path))
             st.session_state.rag_loaded = True
 
-            # Debug: Show where ChromaDB is loading from
-            chroma_path = Path(st.session_state.rag_agent.persist_directory)
-            st.toast(f"✅ Loaded ChromaDB from: {chroma_path}", icon="📦")
-        except Exception as e:
-            st.error(f"Failed to load papers: {str(e)}")
-            st.stop()
+            # Get chunk count for display
+            load_result = getattr(st.session_state.rag_agent, "last_load_result", {}) or {}
+            chunk_count = load_result.get("chunk_count", 0)
 
-if (
-    st.session_state.rag_agent
-    and not st.session_state.rag_auto_rebuilt
-):
-    load_result = getattr(st.session_state.rag_agent, "last_load_result", {}) or {}
-    if load_result.get("chunk_count", 0) == 0:
-        with st.spinner("Vector store empty — rebuilding embeddings from PDFs..."):
-            rebuild_result = st.session_state.rag_agent.load_documents(force_reload=True)
-        st.session_state.rag_agent.last_load_result = rebuild_result
-        if rebuild_result.get("success") and rebuild_result.get("chunk_count", 0) > 0:
-            st.toast(
-                f"Rebuilt vector store with {rebuild_result.get('chunk_count', 0):,} chunks.",
-                icon="🧠",
-            )
-            # Reset conversation so new retrieval powers the chat
-            st.session_state.chat_messages = []
-            st.session_state.rag_total_cost = 0.0
-            st.session_state.rag_query_count = 0
-        else:
-            st.warning(
-                "The vector store is currently empty. Use the **Rebuild Vector Store** button "
-                "in the sidebar once your PDFs are available."
-            )
-        st.session_state.rag_auto_rebuilt = True
+            if chunk_count > 0:
+                st.toast(f"✅ Loaded {chunk_count:,} document chunks from vector store", icon="📦")
+            else:
+                st.warning("⚠️ Vector store loaded but appears empty. You may need to rebuild it using the sidebar button.")
+        except Exception as e:
+            st.error(f"Failed to load vector database: {str(e)}")
+            st.info("💡 The vector store may need to be rebuilt. Use the 'Rebuild Vector Store' button in the sidebar.")
+            st.stop()
 
 # Sidebar
 with st.sidebar:
@@ -269,7 +248,6 @@ with st.sidebar:
                 st.session_state.rag_total_cost = 0.0
                 st.session_state.rag_query_count = 0
                 st.session_state.used_prompts = set()
-                st.session_state.rag_auto_rebuilt = True
                 st.info("Chat history cleared so responses use the refreshed embeddings.")
                 time.sleep(1)
                 st.rerun()
