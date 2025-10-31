@@ -35,6 +35,15 @@ dependencies = [
     # Environment Management
     "python-dotenv>=1.0.0",
 
+    # Embedding and Model Dependencies
+    "sentence-transformers>=2.7.0",
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    "transformers>=4.38.0",
+    "tokenizers>=0.15.0",
+    "huggingface-hub>=0.20.0",
+    "safetensors>=0.4.2",
+
     # RAG Chatbot Dependencies
     "chromadb>=0.4.22",
     "duckduckgo-search>=4.1.0",
