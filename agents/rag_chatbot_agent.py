@@ -21,6 +21,8 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 
 class RAGChatbotAgent:
@@ -121,7 +123,7 @@ class RAGChatbotAgent:
 
                 self.retriever = self.vectorstore.as_retriever(
                     search_type="similarity",
-                    search_kwargs={"k": 4}
+                    search_kwargs={"k": 10}
                 )
 
                 result = {
@@ -207,7 +209,7 @@ class RAGChatbotAgent:
             # Setup retriever
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 4}
+                search_kwargs={"k": 10}
             )
 
             result = {
@@ -229,9 +231,59 @@ class RAGChatbotAgent:
             self.last_load_result = result
             return result
 
+    def _expand_query(self, query: str) -> str:
+        """
+        Expand user query to be more detailed and specific for better retrieval.
+
+        Args:
+            query: Original user query
+
+        Returns:
+            Expanded query with more context and details
+        """
+        expansion_prompt = f"""You are a query expansion expert for AI/ML research papers.
+Your job is to take a user's question and expand it into a more detailed, specific search query
+that will retrieve better results from a vector database of AI research papers.
+
+Original question: {query}
+
+Expand this question by:
+1. Adding relevant technical terms and synonyms
+2. Including related concepts that might appear in relevant papers
+3. Making it more specific and searchable
+4. Keeping it concise (2-3 sentences max)
+
+Return ONLY the expanded query, nothing else."""
+
+        try:
+            response = self.llm.invoke(expansion_prompt)
+            expanded = response.content.strip()
+            return expanded if expanded else query
+        except Exception:
+            # If expansion fails, return original query
+            return query
+
+    def _search_papers(self, query: str) -> Tuple[List, List[Optional[float]], str]:
+        """
+        Tool function to search research papers.
+
+        Args:
+            query: Search query
+
+        Returns:
+            Tuple of (documents, scores, search query used)
+        """
+        # Expand query for better retrieval
+        expanded_query = self._expand_query(query)
+
+        # Retrieve documents
+        docs, scores = self._retrieve_with_scores(expanded_query)
+
+        return docs, scores, expanded_query
+
     def chat_stream(self, message: str) -> Generator[Dict[str, Any], None, None]:
         """
-        Stream response tokens with RAG
+        Stream response tokens with RAG using tool-based retrieval
 
         Args:
             message: User message
@@ -247,68 +299,111 @@ class RAGChatbotAgent:
             return
 
         try:
-            docs, scores = self._retrieve_with_scores(message)
+            # Create search tool
+            @tool
+            def search_research_papers(query: str) -> str:
+                """Search AI research papers for relevant information.
 
-            # Extract and yield sources enriched with highlights
-            sources = [
-                self._build_source_payload(doc, scores[idx], message, rank=idx + 1)
-                for idx, doc in enumerate(docs)
-            ]
+                Use this tool when you need to find information from research papers about:
+                - Transformer architectures and attention mechanisms
+                - BERT, GPT, and other language models
+                - Machine learning and deep learning techniques
+                - AI research and innovations
 
-            self.last_sources = sources
+                Args:
+                    query: The search query describing what information you need
 
-            yield {
-                "type": "sources",
-                "content": sources
-            }
+                Returns:
+                    Context from relevant research papers with citations
+                """
+                docs, scores, expanded_q = self._search_papers(query)
 
-            # Build context from retrieved docs
-            context = "\n\n".join([
-                f"[Source: {Path(doc.metadata.get('source', 'Unknown')).name}, Page {doc.metadata.get('page', 'N/A')}]\n{doc.page_content}"
-                for doc in docs
-            ])
+                # Build context from retrieved docs
+                context = "\n\n".join([
+                    f"[Source: {Path(doc.metadata.get('source', 'Unknown')).name}, Page {doc.metadata.get('page', 'N/A')}]\n{doc.page_content}"
+                    for doc in docs
+                ])
 
-            # Format recent chat history (last 3 exchanges)
+                # Store for later use
+                self._temp_docs = docs
+                self._temp_scores = scores
+                self._temp_query = expanded_q
+
+                return context
+
+            # Bind tool to LLM
+            llm_with_tools = self.llm.bind_tools([search_research_papers])
+
+            # Format recent chat history
             recent_history = ""
             if self.chat_history:
                 for msg in self.chat_history[-6:]:  # Last 3 Q&A pairs
                     role = "User" if msg["role"] == "user" else "Assistant"
                     recent_history += f"{role}: {msg['content']}\n"
 
-            # Create prompt
-            system_context = """You are an expert AI research assistant specializing in Large Language Models (LLMs).
+            # System prompt
+            system_msg = """You are an expert AI research assistant specializing in Large Language Models (LLMs).
 
-You have access to cutting-edge research papers on LLMs, transformers, prompt engineering, fine-tuning, and related topics.
+You have access to a tool that searches cutting-edge research papers on LLMs, transformers, prompt engineering, fine-tuning, and related topics.
 
 Guidelines:
-- Always cite specific papers and page numbers when using information from the context
+- Use the search_research_papers tool when you need information from research papers
+- You can decide whether to use the tool based on the question
+- Always cite specific papers and page numbers when using information from the papers
 - Provide accurate, technical explanations of LLM concepts
-- Compare different approaches and models mentioned in the papers
-- Highlight key innovations and their implications
-- If the papers don't contain enough information to answer a question, say so clearly
-- Use specific examples, equations, and results from the papers when relevant"""
+- If asked a general question that doesn't need paper lookup, answer directly
+- If the papers don't contain enough information, say so clearly"""
 
-            prompt = f"""{system_context}
+            # Build messages
+            messages = [HumanMessage(content=f"{system_msg}\n\n{recent_history}\n\nUser question: {message}")]
 
-Context from research papers:
-{context}
+            # Invoke with tools
+            self._temp_docs = []
+            self._temp_scores = []
+            self._temp_query = message
 
-{f"Recent conversation:{chr(10)}{recent_history}" if recent_history else ""}
+            response = llm_with_tools.invoke(messages)
 
-User question: {message}
+            # Check if tool was called
+            if response.tool_calls:
+                # Execute tool calls
+                for tool_call in response.tool_calls:
+                    tool_output = search_research_papers.invoke(tool_call["args"])
+                    messages.append(response)
+                    messages.append(ToolMessage(content=tool_output, tool_call_id=tool_call["id"]))
 
-Please provide a helpful answer based on the research papers. Always cite your sources."""
+                # Get final response with context
+                full_response = ""
+                for chunk in llm_with_tools.stream(messages):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        token = chunk.content
+                        full_response += token
+                        yield {
+                            "type": "token",
+                            "content": token
+                        }
 
-            # Stream the response
-            full_response = ""
-            for chunk in self.llm.stream(prompt):
-                if hasattr(chunk, 'content'):
-                    token = chunk.content
-                    full_response += token
+                # Build sources from temp storage
+                sources = [
+                    self._build_source_payload(doc, self._temp_scores[idx], self._temp_query, rank=idx + 1)
+                    for idx, doc in enumerate(self._temp_docs)
+                ]
+
+                yield {
+                    "type": "sources",
+                    "content": sources
+                }
+            else:
+                # No tool call - stream direct response
+                full_response = response.content
+                for i, char in enumerate(full_response):
                     yield {
                         "type": "token",
-                        "content": token
+                        "content": char
                     }
+
+                # No sources for direct responses
+                sources = []
 
             # Save to chat history
             self.chat_history.append({"role": "user", "content": message})
@@ -348,7 +443,7 @@ Please provide a helpful answer based on the research papers. Always cite your s
 
         return stats
 
-    def _retrieve_with_scores(self, query: str, k: int = 4) -> Tuple[List, List[Optional[float]]]:
+    def _retrieve_with_scores(self, query: str, k: int = 10) -> Tuple[List, List[Optional[float]]]:
         """
         Retrieve documents alongside similarity scores when available.
         """
