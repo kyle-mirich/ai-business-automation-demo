@@ -134,22 +134,8 @@ if "rag_total_cost" not in st.session_state:
     st.session_state.rag_total_cost = 0.0
 if "rag_query_count" not in st.session_state:
     st.session_state.rag_query_count = 0
-if "used_prompts" not in st.session_state:
-    st.session_state.used_prompts = set()
-if "rag_auto_rebuilt" not in st.session_state:
-    st.session_state.rag_auto_rebuilt = False
-
-# Suggested questions for foundational papers
-SUGGESTED_QUESTIONS = [
-    "What is the self-attention mechanism and how does it work?",
-    "Explain the transformer architecture from 'Attention is All You Need'",
-    "What are the key differences between BERT and GPT?",
-    "How does multi-head attention improve model performance?",
-    "What is positional encoding and why is it necessary?",
-    "How does BERT's masked language modeling differ from GPT's approach?",
-    "What is the Vision Transformer and how does it apply transformers to images?",
-    "Explain the role of feed-forward networks in transformers",
-]
+if "pending_prompt" not in st.session_state:
+    st.session_state.pending_prompt = None
 
 # Auto-load the pre-built vector store on first visit
 if not st.session_state.rag_loaded:
@@ -219,8 +205,8 @@ with st.sidebar:
         st.session_state.chat_messages = []
         st.session_state.rag_total_cost = 0.0
         st.session_state.rag_query_count = 0
-        st.session_state.used_prompts = set()  # Reset used prompts
-        st.success("Chat history and suggested prompts cleared!")
+        st.session_state.pending_prompt = None
+        st.success("Chat history cleared!")
         time.sleep(1)
         st.rerun()
 
@@ -236,7 +222,6 @@ with st.sidebar:
 
     st.divider()
 
-    st.info("💡 **To update the vector store:** Run `python utils/rebuild_vector_store.py` locally, then commit and push the changes.")
 
 # Main chat area header
 st.markdown("""
@@ -294,6 +279,38 @@ def render_source_details(
                 st.caption(" • ".join(meta_bits))
 
 
+# Show suggested prompts only if there are no messages yet
+if not st.session_state.chat_messages:
+    st.markdown("<h5 style='text-align: center; color: #64748b; margin-top: 2rem;'>Try one of these suggested prompts to get started:</h5>", unsafe_allow_html=True)
+
+    # Define prompts with their button labels
+    prompts = {
+        "Self-Attention": "What is the self-attention mechanism and how does it work?",
+        "Transformer Architecture": "Explain the transformer architecture from 'Attention is All You Need'",
+        "BERT vs GPT": "What are the key differences between BERT and GPT?",
+        "Multi-Head Attention": "How does multi-head attention improve model performance?",
+        "Positional Encoding": "What is positional encoding and why is it necessary?",
+        "BERT Masking": "How does BERT's masked language modeling differ from GPT's approach?",
+        "Vision Transformer": "What is the Vision Transformer and how does it apply transformers to images?",
+        "Feed-Forward": "Explain the role of feed-forward networks in transformers"
+    }
+
+    # First row
+    cols = st.columns(4)
+    for i, (label, prompt_text) in enumerate(list(prompts.items())[:4]):
+        with cols[i]:
+            if st.button(label, use_container_width=True, key=f"prompt_{label}"):
+                st.session_state.pending_prompt = prompt_text
+                st.rerun()
+
+    # Second row
+    cols2 = st.columns(4)
+    for i, (label, prompt_text) in enumerate(list(prompts.items())[4:8]):
+        with cols2[i]:
+            if st.button(label, use_container_width=True, key=f"prompt_{label}"):
+                st.session_state.pending_prompt = prompt_text
+                st.rerun()
+
 # Display chat messages
 for idx, message in enumerate(st.session_state.chat_messages):
     with st.chat_message(message["role"]):
@@ -312,67 +329,16 @@ for idx, message in enumerate(st.session_state.chat_messages):
                 f"Output: {cost['output_tokens']:,} tokens"
             )
 
-# Chat input area (similar to Financial Report)
-st.divider()
+# Chat input (fixed to bottom)
+user_input = st.chat_input("Ask a question about AI research papers...")
 
-col1, col2 = st.columns([5, 1])
-
-with col1:
-    user_input = st.text_input(
-        "Your question:",
-        key="chat_input",
-        placeholder="e.g., What is the self-attention mechanism?",
-        label_visibility="collapsed"
-    )
-
-with col2:
-    send_button = st.button("📤 Send", use_container_width=True, type="primary")
-
-st.markdown("<h5 style='text-align: center; color: #64748b;'>Or try one of these suggested prompts:</h5>", unsafe_allow_html=True)
-
-# Define prompts with their button labels
-prompts = {
-    "Self-Attention": "What is the self-attention mechanism and how does it work?",
-    "Transformer Architecture": "Explain the transformer architecture from 'Attention is All You Need'",
-    "BERT vs GPT": "What are the key differences between BERT and GPT?",
-    "Multi-Head Attention": "How does multi-head attention improve model performance?",
-    "Positional Encoding": "What is positional encoding and why is it necessary?",
-    "BERT Masking": "How does BERT's masked language modeling differ from GPT's approach?",
-    "Vision Transformer": "What is the Vision Transformer and how does it apply transformers to images?",
-    "Feed-Forward": "Explain the role of feed-forward networks in transformers"
-}
-
-# Filter out used prompts
-available_prompts = {k: v for k, v in prompts.items() if k not in st.session_state.used_prompts}
-
-# Quick action buttons - First row
-if available_prompts:
-    available_keys = list(available_prompts.keys())
-    cols = st.columns(4)
-
-    for i, (label, prompt_text) in enumerate(available_prompts.items()):
-        if i < 4:  # First row
-            with cols[i]:
-                if st.button(label, use_container_width=True, key=f"prompt_{label}"):
-                    user_input = prompt_text
-                    send_button = True
-                    st.session_state.used_prompts.add(label)
-
-    # Second row
-    if len(available_prompts) > 4:
-        cols2 = st.columns(4)
-        for i, (label, prompt_text) in enumerate(list(available_prompts.items())[4:]):
-            if i < 4:  # Second row
-                with cols2[i]:
-                    if st.button(label, use_container_width=True, key=f"prompt_{label}"):
-                        user_input = prompt_text
-                        send_button = True
-                        st.session_state.used_prompts.add(label)
-else:
-    st.info("💡 All suggested prompts have been used! Feel free to ask your own questions.")
+# Check if there's a pending prompt from suggested buttons
+if "pending_prompt" in st.session_state and st.session_state.pending_prompt:
+    user_input = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None
 
 # Process user input
-if send_button and user_input:
+if user_input:
     prompt = user_input
     # Add user message
     st.session_state.chat_messages.append({
@@ -444,7 +410,3 @@ if send_button and user_input:
             "sources": sources,
             "cost": cost_info
         })
-
-# Footer
-st.divider()
-st.caption("💡 **Tip:** The chatbot remembers conversation context. Ask follow-up questions!")
