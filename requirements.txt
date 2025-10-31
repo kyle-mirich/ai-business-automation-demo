@@ -32,4 +32,9 @@ duckduckgo-search>=4.1.0
 pypdf>=4.0.0
 tiktoken==0.8.0
 arxiv>=2.1.0
+
+# Embedding model dependencies
 sentence-transformers>=2.2.0
+torch>=2.0.0
+transformers>=4.30.0
+huggingface-hub>=0.16.0
