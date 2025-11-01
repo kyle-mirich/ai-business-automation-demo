@@ -98,6 +98,7 @@ class SupportAgentOrchestrator:
         if not api_key:
             raise ValueError("Google Gemini API key is required for SupportAgentOrchestrator.")
 
+        self.model = model  # Add model attribute for API compatibility
         self.model_name = model
         self.llm = ChatGoogleGenerativeAI(
             model=model,
@@ -447,3 +448,18 @@ Ticket Details:
         cleaned = cleaned.replace("\u2028", " ").replace("\u2029", " ")
         cleaned = " ".join(cleaned.split())
         return cleaned.strip()
+
+    # -------------------------------------------------------------------------
+    # API compatibility method
+    # -------------------------------------------------------------------------
+    def run(self, ticket: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        API-compatible wrapper for process_ticket
+
+        Args:
+            ticket: Ticket dict with required fields (ticket_id, subject, description, customer_email, etc.)
+
+        Returns:
+            Result dict with all processing information
+        """
+        return self.process_ticket(ticket)

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import pickle
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,6 +26,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from utils.cost_calculator import calculate_gemini_cost, estimate_tokens
+
+# Cache directory for Prophet models
+CACHE_DIR = Path("data/.forecast_cache")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 REQUIRED_COLUMNS = {
@@ -76,7 +82,7 @@ class InventoryAgent:
     def __init__(
         self,
         api_key: str,
-        data_path: str,
+        data_path: Optional[str] = None,
         model: str = "gemini-2.5-flash",
         temperature: float = 0.4,
     ):
@@ -84,6 +90,7 @@ class InventoryAgent:
             raise ValueError("Google Gemini API key is required for InventoryAgent.")
 
         self.data_path = data_path
+        self.model = model  # Add model attribute for API compatibility
         self.model_name = model
         self.temperature = temperature
         self.df: Optional[pd.DataFrame] = None
@@ -314,16 +321,51 @@ class InventoryAgent:
         return self.analysis_result
 
     # ------------------------------------------------------------------
-    # Forecasting with Prophet
+    # Forecasting with Prophet (with caching)
     # ------------------------------------------------------------------
+    def _get_cache_key(self, row: pd.Series, horizon_days: int, history_days: int) -> str:
+        """Generate cache key based on SKU and historical data."""
+        key_data = f"{row['sku']}_{row['last_30_days_sales']}_{horizon_days}_{history_days}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+
+    def _load_cached_forecast(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Load forecast from cache if it exists."""
+        cache_file = CACHE_DIR / f"{cache_key}.pkl"
+        if cache_file.exists():
+            try:
+                with open(cache_file, 'rb') as f:
+                    return pickle.load(f)
+            except Exception:
+                return None
+        return None
+
+    def _save_forecast_to_cache(self, cache_key: str, forecast_data: Dict[str, Any]):
+        """Save forecast to cache."""
+        cache_file = CACHE_DIR / f"{cache_key}.pkl"
+        try:
+            with open(cache_file, 'wb') as f:
+                pickle.dump(forecast_data, f)
+        except Exception:
+            pass  # Silently fail if caching doesn't work
+
     def forecast_demand(self, horizon_days: int = 30, history_days: int = 60) -> pd.DataFrame:
-        """Train lightweight Prophet models per SKU and return 30-day demand forecasts."""
+        """Train lightweight Prophet models per SKU and return 30-day demand forecasts (with caching)."""
         if self.df is None:
             raise RuntimeError("Inventory data not loaded. Call load_inventory() first.")
 
         self.forecast_timelines.clear()
         forecasts: List[Dict[str, Any]] = []
         for _, row in self.df.iterrows():
+            # Check cache first
+            cache_key = self._get_cache_key(row, horizon_days, history_days)
+            cached_result = self._load_cached_forecast(cache_key)
+
+            if cached_result is not None:
+                # Use cached forecast
+                forecasts.append(cached_result['forecast'])
+                self.forecast_timelines[row["sku"]] = cached_result['timeline']
+                continue
+
             history = self._build_history(row, history_days)
 
             try:
@@ -370,22 +412,28 @@ class InventoryAgent:
 
             self.forecast_timelines[row["sku"]] = timeline
 
-            forecasts.append(
-                {
-                    "sku": row["sku"],
-                    "product_name": row["product_name"],
-                    "category": row["category"],
-                    "forecast_units": round(total_demand, 1),
-                    "avg_daily_demand": round(avg_daily, 2),
-                    "forecast_lower": round(lower, 1),
-                    "forecast_upper": round(upper, 1),
-                    "current_stock": int(row["current_stock"]),
-                    "reorder_point": int(row["reorder_point"]),
-                    "lead_time_days": int(row["lead_time_days"]),
-                    "cost_per_unit": float(row["cost_per_unit"]),
-                    "last_30_days_sales": int(row["last_30_days_sales"]),
-                }
-            )
+            forecast_data = {
+                "sku": row["sku"],
+                "product_name": row["product_name"],
+                "category": row["category"],
+                "forecast_units": round(total_demand, 1),
+                "avg_daily_demand": round(avg_daily, 2),
+                "forecast_lower": round(lower, 1),
+                "forecast_upper": round(upper, 1),
+                "current_stock": int(row["current_stock"]),
+                "reorder_point": int(row["reorder_point"]),
+                "lead_time_days": int(row["lead_time_days"]),
+                "cost_per_unit": float(row["cost_per_unit"]),
+                "last_30_days_sales": int(row["last_30_days_sales"]),
+            }
+
+            forecasts.append(forecast_data)
+
+            # Cache the forecast result
+            self._save_forecast_to_cache(cache_key, {
+                'forecast': forecast_data,
+                'timeline': timeline
+            })
 
         forecast_df = pd.DataFrame(forecasts)
         forecast_df["coverage_days"] = np.where(
@@ -721,3 +769,67 @@ class InventoryAgent:
                 except json.JSONDecodeError:
                     return None
         return None
+
+    # -------------------------------------------------------------------------
+    # API compatibility method
+    # -------------------------------------------------------------------------
+    def run(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        API-compatible method to run full inventory analysis
+
+        Args:
+            df: DataFrame with inventory data
+
+        Returns:
+            Dict with analyzed_data, recommendations, ai_insights, summary, and token_usage
+        """
+        # Set the dataframe
+        self.df = df.copy()
+
+        # Run analysis pipeline
+        analysis = self.analyze_inventory()
+        forecast = self.forecast_demand()
+        recommendations = self.generate_recommendations()
+
+        # Build status column for each item
+        df_result = self.df.copy()
+        df_result["status"] = "OK"
+
+        # Mark low stock items
+        low_stock_skus = {item["sku"] for item in analysis.get("low_stock", [])}
+        df_result.loc[df_result["sku"].isin(low_stock_skus), "status"] = "LOW_STOCK"
+
+        # Mark overstock items
+        overstock_skus = {item["sku"] for item in analysis.get("overstock", [])}
+        df_result.loc[df_result["sku"].isin(overstock_skus), "status"] = "OVERSTOCK"
+
+        # Add forecast data
+        if forecast is not None:
+            df_result = df_result.merge(
+                forecast[["sku", "forecast_units", "avg_daily_demand", "coverage_days"]],
+                on="sku",
+                how="left"
+            )
+            df_result["forecast_30d"] = df_result["forecast_units"]
+            df_result["forecast_60d"] = df_result["forecast_units"] * 2
+            df_result["forecast_90d"] = df_result["forecast_units"] * 3
+
+        # Format recommendations for API
+        formatted_recs = []
+        for rec in recommendations.get("recommendations", []):
+            formatted_recs.append({
+                "sku": rec.get("sku", ""),
+                "product_name": rec.get("product_name", ""),
+                "action": f"{rec.get('priority', 'MEDIUM')}: Order {rec.get('recommended_order_qty', 0)} units",
+                "reasoning": rec.get("reason", ""),
+                "urgency": rec.get("priority", "MEDIUM").lower(),
+                "estimated_cost_impact": rec.get("estimated_cost", 0.0)
+            })
+
+        return {
+            "analyzed_data": df_result,
+            "recommendations": formatted_recs,
+            "ai_insights": recommendations.get("overall_notes", ""),
+            "summary": analysis.get("summary", {}),
+            "token_usage": self.usage.to_dict()
+        }

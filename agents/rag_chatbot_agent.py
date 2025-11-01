@@ -17,7 +17,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:
+    from langchain_community.embeddings import HuggingFaceEmbeddings
 try:
     from langchain_chroma import Chroma
 except ImportError:
@@ -112,32 +115,36 @@ class RAGChatbotAgent:
             # Check if vector store already exists
             chroma_file = persist_directory / "chroma.sqlite3"
             if not force_reload and chroma_file.exists():
-                # Load existing vector store
-                self.vectorstore = Chroma(
-                    collection_name=self.collection_name,
-                    embedding_function=self.embeddings,
-                    persist_directory=str(persist_directory)
-                )
-
                 try:
-                    collection = self.vectorstore._collection
-                    doc_count = collection.count()
-                except Exception:
-                    doc_count = 0
+                    # Load existing vector store
+                    self.vectorstore = Chroma(
+                        collection_name=self.collection_name,
+                        embedding_function=self.embeddings,
+                        persist_directory=str(persist_directory)
+                    )
 
-                self.retriever = self.vectorstore.as_retriever(
-                    search_type="similarity",
-                    search_kwargs={"k": 10}
-                )
+                    try:
+                        collection = self.vectorstore._collection
+                        doc_count = collection.count()
+                    except Exception:
+                        doc_count = 0
 
-                result = {
-                    "success": True,
-                    "message": f"Loaded existing vector database with {doc_count} document chunks",
-                    "chunk_count": doc_count,
-                    "is_new": False
-                }
-                self.last_load_result = result
-                return result
+                    self.retriever = self.vectorstore.as_retriever(
+                        search_type="similarity",
+                        search_kwargs={"k": 10}
+                    )
+
+                    result = {
+                        "success": True,
+                        "message": f"Loaded existing vector database with {doc_count} document chunks",
+                        "chunk_count": doc_count,
+                        "is_new": False
+                    }
+                    self.last_load_result = result
+                    return result
+                except Exception as e:
+                    # If loading fails, fall through to rebuild
+                    print(f"Warning: Failed to load existing ChromaDB: {str(e)}. Will rebuild from PDFs.")
 
             # Check if PDFs exist
             if not self.documents_path.exists():
@@ -173,27 +180,50 @@ class RAGChatbotAgent:
                 source_path = Path(doc.metadata.get("source", resolved_base))
                 doc.metadata["source"] = str(source_path.resolve())
 
-            # Split documents into chunks
+            # Split documents into chunks - prioritize sentence boundaries
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1400,
-                chunk_overlap=280,
+                chunk_size=1000,
+                chunk_overlap=200,
                 length_function=len,
-                separators=["\n\n", "\n", ". ", " ", ""]
+                separators=[
+                    "\n\n",           # Paragraph breaks (highest priority)
+                    "\n",             # Line breaks
+                    ". ",             # End of sentences with period
+                    "! ",             # End of sentences with exclamation
+                    "? ",             # End of sentences with question mark
+                    "; ",             # Semicolons
+                    ", ",             # Commas
+                    " ",              # Spaces
+                    ""                # Characters (last resort)
+                ],
+                is_separator_regex=False
             )
             chunks = text_splitter.split_documents(documents)
 
+            # Enrich metadata for each chunk
             for chunk in chunks:
                 meta = chunk.metadata
                 source_path = Path(meta.get("source", resolved_base)).resolve()
+
+                # Store full path and filename separately
                 meta["source"] = str(source_path)
+                meta["file"] = source_path.name
+                meta["file_path"] = str(source_path)
+
+                # Fix page numbering (convert from 0-indexed to 1-indexed)
                 if "page" in meta:
                     try:
                         page_idx = int(meta["page"])
                         meta["page"] = page_idx + 1
                     except Exception:
                         pass
-                if "chunk_index" not in meta:
+
+                # Add chunk index if not present
+                if "chunk_index" not in meta and meta.get("seq_num"):
                     meta["chunk_index"] = meta.get("seq_num")
+
+                # Remove None values - ChromaDB doesn't accept them
+                chunk.metadata = {k: v for k, v in meta.items() if v is not None}
 
             # Create vector store
             self.vectorstore = Chroma.from_documents(
@@ -324,7 +354,7 @@ Return ONLY the expanded query, nothing else."""
 
                 # Build context from retrieved docs
                 context = "\n\n".join([
-                    f"[Source: {Path(doc.metadata.get('source', 'Unknown')).name}, Page {doc.metadata.get('page', 'N/A')}]\n{doc.page_content}"
+                    f"[Source: {doc.metadata.get('file', Path(doc.metadata.get('source', 'Unknown')).name)}, Page {doc.metadata.get('page', 'N/A')}]\n{doc.page_content}"
                     for doc in docs
                 ])
 
@@ -491,10 +521,11 @@ Guidelines:
         page_content = doc.page_content or ""
         metadata = doc.metadata or {}
         source_path = metadata.get("source") or "Unknown"
+        file_path = metadata.get("file_path", source_path)
+        filename = metadata.get("file", Path(source_path).name if source_path != "Unknown" else "Unknown")
         page = metadata.get("page", "N/A")
 
-        path_obj = Path(source_path)
-        filename = path_obj.name or str(source_path)
+        path_obj = Path(file_path)
         try:
             relative_href = path_obj.relative_to(self.documents_path)
         except (ValueError, RuntimeError):
@@ -533,6 +564,8 @@ Guidelines:
         return {
             "rank": rank,
             "source": filename,
+            "file": filename,
+            "file_path": file_path,
             "page": page,
             "score": score,
             "chunk_excerpt": self._build_plain_excerpt(page_content),
@@ -594,3 +627,112 @@ Guidelines:
             last_idx = match.end()
         result_parts.append(html.escape(text[last_idx:]))
         return "".join(result_parts)
+
+    # -------------------------------------------------------------------------
+    # API compatibility methods
+    # -------------------------------------------------------------------------
+    def query(
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        top_k: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Non-streaming query method for API compatibility
+
+        Args:
+            query: User query
+            conversation_history: List of previous messages in format [{"type": "human"/"ai", "content": str}]
+            top_k: Number of documents to retrieve
+
+        Returns:
+            Dict with answer, sources, and tokens_used
+        """
+        # Ensure documents are loaded
+        if self.vectorstore is None or self.retriever is None:
+            load_result = self.load_documents(force_reload=False)
+            if not load_result.get("success"):
+                return {
+                    "answer": f"Error loading documents: {load_result.get('message', 'Unknown error')}",
+                    "sources": [],
+                    "tokens_used": 0
+                }
+
+        # Convert conversation history to internal format
+        if conversation_history:
+            self.chat_history = []
+            for msg in conversation_history:
+                msg_type = msg.get("type", "human")
+                content = msg.get("content", "")
+                if msg_type == "human":
+                    self.chat_history.append({"role": "user", "content": content})
+                elif msg_type == "ai":
+                    self.chat_history.append({"role": "assistant", "content": content})
+
+        # Collect full response from streaming
+        full_answer = ""
+        sources = []
+
+        for chunk in self.chat_stream(query):
+            if chunk.get("type") == "token":
+                full_answer += chunk.get("content", "")
+            elif chunk.get("type") == "sources":
+                sources = chunk.get("content", [])
+            elif chunk.get("type") == "complete":
+                full_answer = chunk.get("content", full_answer)
+                if not sources:
+                    sources = chunk.get("sources", [])
+            elif chunk.get("type") == "error":
+                return {
+                    "answer": chunk.get("content", "An error occurred"),
+                    "sources": [],
+                    "tokens_used": 0
+                }
+
+        # Estimate tokens (approximate)
+        tokens_used = len(query.split()) + len(full_answer.split())
+
+        return {
+            "answer": full_answer,
+            "sources": sources,
+            "tokens_used": tokens_used
+        }
+
+    def query_stream(
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        top_k: int = 3
+    ) -> Generator[str, None, None]:
+        """
+        Streaming query method for API compatibility
+
+        Args:
+            query: User query
+            conversation_history: List of previous messages
+            top_k: Number of documents to retrieve
+
+        Yields:
+            JSON strings with streaming chunks
+        """
+        # Ensure documents are loaded
+        if self.vectorstore is None:
+            load_result = self.load_documents()
+            if not load_result.get("success"):
+                yield json.dumps({"error": "Could not load documents"})
+                return
+
+        # Convert conversation history to internal format
+        if conversation_history:
+            self.chat_history = []
+            for msg in conversation_history:
+                msg_type = msg.get("type", "human")
+                content = msg.get("content", "")
+                if msg_type == "human":
+                    self.chat_history.append({"role": "user", "content": content})
+                elif msg_type == "ai":
+                    self.chat_history.append({"role": "assistant", "content": content})
+
+        # Stream response
+        for chunk in self.chat_stream(query):
+            yield json.dumps(chunk)

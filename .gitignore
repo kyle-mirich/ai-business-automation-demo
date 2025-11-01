@@ -34,6 +34,10 @@ wheels/
 *.swo
 *~
 
+# Node (npm / yarn)
+node_modules/
+**/node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -44,5 +48,12 @@ Thumbs.db
 # Windows reserved device names (avoid trying to add these files)
 nul
 
+# Next.js build/cache
+.next/
+.next/cache/
+
 # ChromaDB
 data/papers/rag_chroma/
+
+# Prophet forecast cache
+data/.forecast_cache/
