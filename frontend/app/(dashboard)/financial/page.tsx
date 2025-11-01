@@ -421,7 +421,7 @@ function ChatTab({ messages, input, setInput, onSubmit, isLoading, suggestedProm
                         <Bot className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">AI Analyst:</div>
-                          <div className="prose prose-sm max-w-none mt-1 prose-headings:font-bold prose-p:text-gray-700 prose-a:text-green-600 prose-code:text-green-600 prose-code:bg-green-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-strong:text-gray-900">
+                          <div className="prose prose-sm max-w-none mt-1 prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-900 prose-a:text-green-600 prose-code:text-green-600 prose-code:bg-green-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-strong:text-gray-900 prose-li:text-gray-900 [&>*]:text-gray-900">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               rehypePlugins={[rehypeHighlight, rehypeRaw]}
@@ -530,7 +530,7 @@ function ChatTab({ messages, input, setInput, onSubmit, isLoading, suggestedProm
               onChange={(e) => setInput(e.target.value)}
               placeholder="e.g., What were our top products in September?"
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 text-gray-900"
             />
             <Button type="submit" disabled={isLoading || !input.trim()}>
               <Send className="w-4 h-4 mr-2" />
@@ -601,7 +601,7 @@ function ReportTab({ report, isGenerating, progress, onGenerate }: any) {
               <CardTitle>📄 AI-Generated Financial Report</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-green-600 prose-strong:text-gray-900 prose-li:text-gray-700 prose-code:text-green-600 prose-code:bg-green-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+              <div className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-900 prose-a:text-green-600 prose-strong:text-gray-900 prose-li:text-gray-900 prose-code:text-green-600 prose-code:bg-green-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100 [&>*]:text-gray-900">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight, rehypeRaw]}
